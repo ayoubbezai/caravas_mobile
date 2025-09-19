@@ -11,6 +11,7 @@ import {
   Alert,
   StatusBar,
   ScrollView,
+  TextStyle,
 } from "react-native";
 
 type ElementType =
@@ -44,8 +45,13 @@ interface AccidentElement {
 }
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+// Responsive scaling helpers
+const BASE_WIDTH = 390;
+const uiScale = Math.min(1, Math.max(0.75, screenWidth / BASE_WIDTH));
+const scaleValue = (v: number) => Math.max(10, Math.round(v * uiScale));
 
-const ELEMENTS = {
+// Base element sizes; will be scaled at runtime for mobile
+const BASE_ELEMENTS = {
   // Vehicles
   car_a: {
     width: 80,
@@ -152,7 +158,22 @@ const ELEMENTS = {
   },
 };
 
+const getScaledConfig = (type: ElementType) => {
+  const cfg = (BASE_ELEMENTS as any)[type];
+  return {
+    ...cfg,
+    width: scaleValue(cfg.width),
+    height: scaleValue(cfg.height),
+  };
+};
+
 const snapToGrid = (value: number, grid = 5) => Math.round(value / grid) * grid;
+
+// Safe way to read Animated values in TS
+const getAnimValue = (v: any): number => {
+  if (v && typeof v.__getValue === "function") return v.__getValue();
+  return typeof v?._value === "number" ? v._value : 0;
+};
 
 // Enhanced Vehicle Component with proper rotation center
 const VehicleShape: React.FC<{
@@ -179,8 +200,8 @@ const VehicleShape: React.FC<{
         {
           width: element.width,
           height: element.height,
-          borderWidth: isSelected ? 3 : 1,
-          borderColor: isSelected ? "#fbbf24" : "#ffffff",
+          borderWidth: isSelected ? 2 : 1,
+          borderColor: isSelected ? "#fbbf24" : "#e5e7eb",
           backgroundColor: element.color,
         },
         getVehicleStyle(),
@@ -232,7 +253,10 @@ const VehicleShape: React.FC<{
 
       {/* Label */}
       <View style={styles.labelContainer}>
-        <Text style={styles.vehicleLabel}>{element.label}</Text>
+        <Text style={[
+          styles.vehicleLabel,
+          { fontSize: Math.max(8, Math.round(9 * uiScale)) as any }
+        ]}>{element.label}</Text>
       </View>
     </View>
   );
@@ -251,8 +275,8 @@ const DraggableElement: React.FC<{
     onPanResponderGrant: () => {
       onSelect(element.id);
       element.position.setOffset({
-        x: element.position.x._value,
-        y: element.position.y._value,
+        x: getAnimValue(element.position.x),
+        y: getAnimValue(element.position.y),
       });
     },
     onPanResponderMove: Animated.event(
@@ -266,7 +290,7 @@ const DraggableElement: React.FC<{
       const newX = snapToGrid(
         Math.max(
           10,
-          Math.min(canvasWidth - element.width - 10, element.position.x._value)
+          Math.min(canvasWidth - element.width - 10, getAnimValue(element.position.x))
         )
       );
       const newY = snapToGrid(
@@ -274,7 +298,7 @@ const DraggableElement: React.FC<{
           10,
           Math.min(
             canvasHeight - element.height - 10,
-            element.position.y._value
+            getAnimValue(element.position.y)
           )
         )
       );
@@ -443,18 +467,18 @@ const getElementSymbol = (type: ElementType) => {
   }
 };
 
-const getTextStyle = (type: ElementType) => {
-  const baseStyle = { fontSize: 8, fontWeight: "600" };
+const getTextStyle = (type: ElementType): TextStyle => {
+  const baseStyle: TextStyle = { fontSize: 8, fontWeight: "600" as TextStyle["fontWeight"] };
 
   switch (type) {
     case "road_straight":
     case "intersection":
     case "skid_marks":
-      return { ...baseStyle, color: "#facc15" };
+      return { ...baseStyle, color: "#facc15" } as TextStyle;
     case "stop_sign":
-      return { ...baseStyle, color: "#ffffff", fontSize: 6 };
+      return { ...baseStyle, color: "#ffffff", fontSize: 6 } as TextStyle;
     default:
-      return { ...baseStyle, color: "#ffffff" };
+      return { ...baseStyle, color: "#ffffff" } as TextStyle;
   }
 };
 
@@ -463,16 +487,16 @@ const Sketch: React.FC = () => {
     {
       id: "car_a",
       type: "car_a",
-      position: new Animated.ValueXY({ x: 100, y: 200 }),
+      position: new Animated.ValueXY({ x: scaleValue(100), y: scaleValue(200) }),
       rotation: new Animated.Value(0),
-      ...ELEMENTS.car_a,
+      ...getScaledConfig("car_a"),
     },
     {
       id: "car_b",
       type: "car_b",
-      position: new Animated.ValueXY({ x: 200, y: 250 }),
+      position: new Animated.ValueXY({ x: scaleValue(200), y: scaleValue(250) }),
       rotation: new Animated.Value(90),
-      ...ELEMENTS.car_b,
+      ...getScaledConfig("car_b"),
     },
   ]);
 
@@ -480,9 +504,11 @@ const Sketch: React.FC = () => {
     "car_a"
   );
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showControls, setShowControls] = useState(true);
+  const [showControls, setShowControls] = useState(false);
 
-  const canvasHeight = isFullscreen ? screenHeight : screenHeight * 0.55;
+  const canvasHeight = isFullscreen
+    ? screenHeight
+    : Math.max(300, Math.min(screenHeight * 0.6, 520 * uiScale));
   const canvasWidth = screenWidth - 20;
 
   const rotateSelected = (degrees: number) => {
@@ -490,7 +516,7 @@ const Sketch: React.FC = () => {
     const element = elements.find((e) => e.id === selectedElement);
     if (element) {
       // Rotate in place without moving the element
-      const newRotation = (element.rotation._value + degrees + 360) % 360;
+      const newRotation = (getAnimValue(element.rotation) + degrees + 360) % 360;
       Animated.spring(element.rotation, {
         toValue: newRotation,
         useNativeDriver: false,
@@ -517,7 +543,7 @@ const Sketch: React.FC = () => {
   };
 
   const addElement = (type: ElementType) => {
-    const config = ELEMENTS[type];
+    const config = getScaledConfig(type);
     const newElement: AccidentElement = {
       id: `${type}_${Date.now()}`,
       type,
@@ -541,10 +567,10 @@ const Sketch: React.FC = () => {
         ...element,
         id: `${element.type}_${Date.now()}`,
         position: new Animated.ValueXY({
-          x: element.position.x._value + 20,
-          y: element.position.y._value + 20,
+          x: getAnimValue(element.position.x) + 20,
+          y: getAnimValue(element.position.y) + 20,
         }),
-        rotation: new Animated.Value(element.rotation._value),
+        rotation: new Animated.Value(getAnimValue(element.rotation)),
       };
       setElements([...elements, newElement]);
       setSelectedElement(newElement.id);
@@ -584,7 +610,7 @@ const Sketch: React.FC = () => {
       {/* Header */}
       {!isFullscreen && (
         <View style={styles.header}>
-          <Text style={styles.title}>🚗 Pro Accident Reconstruction</Text>
+            <Text style={styles.title}>🚗 Accident Sketch</Text>
           <View style={styles.headerButtons}>
             <TouchableOpacity
               style={styles.headerBtn}
@@ -642,7 +668,7 @@ const Sketch: React.FC = () => {
         <View style={styles.infoBar}>
           <Text style={styles.infoText}>
             <Text style={styles.infoHighlight}>{selectedEl.label}</Text> •
-            Angle: {Math.round(selectedEl.rotation._value)}° • Layer:{" "}
+            Angle: {Math.round(getAnimValue(selectedEl.rotation))}° • Layer:{" "}
             {selectedEl.zIndex}
           </Text>
         </View>
@@ -695,7 +721,7 @@ const Sketch: React.FC = () => {
               <TouchableOpacity
                 style={[
                   styles.addBtn,
-                  { backgroundColor: ELEMENTS.car_a.color },
+                  { backgroundColor: (BASE_ELEMENTS as any).car_a.color },
                 ]}
                 onPress={() => addElement("car_a")}
               >
@@ -704,7 +730,7 @@ const Sketch: React.FC = () => {
               <TouchableOpacity
                 style={[
                   styles.addBtn,
-                  { backgroundColor: ELEMENTS.car_b.color },
+                  { backgroundColor: (BASE_ELEMENTS as any).car_b.color },
                 ]}
                 onPress={() => addElement("car_b")}
               >
@@ -713,7 +739,7 @@ const Sketch: React.FC = () => {
               <TouchableOpacity
                 style={[
                   styles.addBtn,
-                  { backgroundColor: ELEMENTS.car_c.color },
+                  { backgroundColor: (BASE_ELEMENTS as any).car_c.color },
                 ]}
                 onPress={() => addElement("car_c")}
               >
@@ -722,7 +748,7 @@ const Sketch: React.FC = () => {
               <TouchableOpacity
                 style={[
                   styles.addBtn,
-                  { backgroundColor: ELEMENTS.truck.color },
+                  { backgroundColor: (BASE_ELEMENTS as any).truck.color },
                 ]}
                 onPress={() => addElement("truck")}
               >
@@ -731,14 +757,17 @@ const Sketch: React.FC = () => {
               <TouchableOpacity
                 style={[
                   styles.addBtn,
-                  { backgroundColor: ELEMENTS.motorcycle.color },
+                  { backgroundColor: (BASE_ELEMENTS as any).motorcycle.color },
                 ]}
                 onPress={() => addElement("motorcycle")}
               >
                 <Text style={styles.addBtnText}>Motorcycle</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.addBtn, { backgroundColor: ELEMENTS.bus.color }]}
+                style={[
+                  styles.addBtn,
+                  { backgroundColor: (BASE_ELEMENTS as any).bus.color },
+                ]}
                 onPress={() => addElement("bus")}
               >
                 <Text style={styles.addBtnText}>Bus</Text>
@@ -753,7 +782,7 @@ const Sketch: React.FC = () => {
               <TouchableOpacity
                 style={[
                   styles.addBtn,
-                  { backgroundColor: ELEMENTS.road_straight.color },
+                  { backgroundColor: (BASE_ELEMENTS as any).road_straight.color },
                 ]}
                 onPress={() => addElement("road_straight")}
               >
@@ -762,7 +791,7 @@ const Sketch: React.FC = () => {
               <TouchableOpacity
                 style={[
                   styles.addBtn,
-                  { backgroundColor: ELEMENTS.intersection.color },
+                  { backgroundColor: (BASE_ELEMENTS as any).intersection.color },
                 ]}
                 onPress={() => addElement("intersection")}
               >
@@ -771,7 +800,7 @@ const Sketch: React.FC = () => {
               <TouchableOpacity
                 style={[
                   styles.addBtn,
-                  { backgroundColor: ELEMENTS.roundabout.color },
+                  { backgroundColor: (BASE_ELEMENTS as any).roundabout.color },
                 ]}
                 onPress={() => addElement("roundabout")}
               >
@@ -780,7 +809,7 @@ const Sketch: React.FC = () => {
               <TouchableOpacity
                 style={[
                   styles.addBtn,
-                  { backgroundColor: ELEMENTS.traffic_light.color },
+                  { backgroundColor: (BASE_ELEMENTS as any).traffic_light.color },
                 ]}
                 onPress={() => addElement("traffic_light")}
               >
@@ -789,7 +818,7 @@ const Sketch: React.FC = () => {
               <TouchableOpacity
                 style={[
                   styles.addBtn,
-                  { backgroundColor: ELEMENTS.stop_sign.color },
+                  { backgroundColor: (BASE_ELEMENTS as any).stop_sign.color },
                 ]}
                 onPress={() => addElement("stop_sign")}
               >
@@ -805,7 +834,7 @@ const Sketch: React.FC = () => {
               <TouchableOpacity
                 style={[
                   styles.addBtn,
-                  { backgroundColor: ELEMENTS.impact.color },
+                  { backgroundColor: (BASE_ELEMENTS as any).impact.color },
                 ]}
                 onPress={() => addElement("impact")}
               >
@@ -814,7 +843,7 @@ const Sketch: React.FC = () => {
               <TouchableOpacity
                 style={[
                   styles.addBtn,
-                  { backgroundColor: ELEMENTS.debris.color },
+                  { backgroundColor: (BASE_ELEMENTS as any).debris.color },
                 ]}
                 onPress={() => addElement("debris")}
               >
@@ -823,7 +852,7 @@ const Sketch: React.FC = () => {
               <TouchableOpacity
                 style={[
                   styles.addBtn,
-                  { backgroundColor: ELEMENTS.skid_marks.color },
+                  { backgroundColor: (BASE_ELEMENTS as any).skid_marks.color },
                 ]}
                 onPress={() => addElement("skid_marks")}
               >

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,8 +11,14 @@ import {
   Animated,
   Easing,
   Dimensions,
+  Modal,
+  KeyboardAvoidingView,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from "react-native";
-import Sketch from "@/components/Sketch"
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
+import Sketch from "@/components/Sketch";
 import {
   ChevronLeft,
   ChevronRight,
@@ -23,14 +29,20 @@ import {
   FileText,
   X,
   Calendar,
+  Download,
   Clock,
   AlertCircle,
   CheckCircle,
   Search,
   ChevronDown,
+  Plus,
+  Minus,
+  Edit3,
+  Image as ImageIcon,
 } from "lucide-react-native";
+import { ConstatServices } from "@/services/ConstatServices";
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
 
 // Types for our data
 interface Driver {
@@ -66,13 +78,63 @@ interface AccidentDetails {
   time: string;
   description: string;
   damages: string[];
-  witnesses: string[];
+  witnesses: Witness[];
   sketch: string;
   responsibleParty: "A" | "B" | null;
 }
 
+interface Witness {
+  id: string;
+  name: string;
+  contact: string;
+}
+
 const ConstatForm: React.FC = () => {
+  const SketchComponent = Sketch as unknown as React.ComponentType<{
+    onSave: (sketchData: string) => void;
+    initialData: string;
+  }>;
+
   const [step, setStep] = useState(1);
+  const [sketchModalVisible, setSketchModalVisible] = useState(false);
+  const [witnessModalVisible, setWitnessModalVisible] = useState(false);
+  const [currentWitness, setCurrentWitness] = useState<Witness>({
+    id: "",
+    name: "",
+    contact: "",
+  });
+  const [isEditingWitness, setIsEditingWitness] = useState(false);
+
+  const loadProfile = async () => {
+    try {
+      const res = await ConstatServices.getDetails();
+      console.log(res);
+      if (res.success && res.data) {
+        Animated.parallel([
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(slideAnim, {
+            toValue: 0,
+            duration: 500,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ]).start();
+      } else {
+      }
+    } catch (err) {
+    } finally {
+    }
+  };
+
+  useEffect(() => {
+    loadProfile();
+  }, []);
+  loadProfile();
+
   const [drivers, setDrivers] = useState<Driver[]>([
     {
       id: "1",
@@ -124,8 +186,11 @@ const ConstatForm: React.FC = () => {
   });
 
   const [details, setDetails] = useState<AccidentDetails>({
-    date: "",
-    time: "",
+    date: new Date().toLocaleDateString("fr-FR"),
+    time: new Date().toLocaleTimeString("fr-FR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
     description: "",
     damages: [],
     witnesses: [],
@@ -134,8 +199,8 @@ const ConstatForm: React.FC = () => {
   });
 
   // Animation values
-  const fadeAnim = useState(new Animated.Value(0))[0];
-  const slideAnim = useState(new Animated.Value(50))[0];
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
 
   React.useEffect(() => {
     // Animate on step change
@@ -197,10 +262,7 @@ const ConstatForm: React.FC = () => {
     setLocation({ ...location, [field]: value });
   };
 
-  const handleDetailsChange = (
-    field: keyof AccidentDetails,
-    value: string | string[] | "A" | "B" | null
-  ) => {
+  const handleDetailsChange = (field: keyof AccidentDetails, value: any) => {
     setDetails({ ...details, [field]: value });
   };
 
@@ -213,32 +275,706 @@ const ConstatForm: React.FC = () => {
     handleDetailsChange("damages", updatedDamages);
   };
 
-  const handleWitnessAdd = () => {
-    Alert.prompt(
-      "Témoin",
-      "Nom et coordonnées du témoin:",
-      [
-        {
-          text: "Annuler",
-          style: "cancel",
-        },
-        {
-          text: "Ajouter",
-          onPress: (newWitness?: string) => {
-            if (newWitness) {
-              handleDetailsChange("witnesses", [
-                ...details.witnesses,
-                newWitness,
-              ]);
-            }
-          },
-        },
-      ],
-      "plain-text"
+  const openWitnessModal = (witness?: Witness) => {
+    if (witness) {
+      setCurrentWitness(witness);
+      setIsEditingWitness(true);
+    } else {
+      setCurrentWitness({ id: Date.now().toString(), name: "", contact: "" });
+      setIsEditingWitness(false);
+    }
+    setWitnessModalVisible(true);
+  };
+
+  const saveWitness = () => {
+    if (!currentWitness.name.trim()) {
+      Alert.alert("Erreur", "Veuillez saisir le nom du témoin");
+      return;
+    }
+
+    if (isEditingWitness) {
+      const updatedWitnesses = details.witnesses.map((w) =>
+        w.id === currentWitness.id ? currentWitness : w
+      );
+      handleDetailsChange("witnesses", updatedWitnesses);
+    } else {
+      handleDetailsChange("witnesses", [...details.witnesses, currentWitness]);
+    }
+
+    setWitnessModalVisible(false);
+    setCurrentWitness({ id: "", name: "", contact: "" });
+  };
+
+  const removeWitness = (id: string) => {
+    handleDetailsChange(
+      "witnesses",
+      details.witnesses.filter((w) => w.id !== id)
     );
   };
 
+  const handleSketchSave = (sketchData: string) => {
+    handleDetailsChange("sketch", sketchData);
+    setSketchModalVisible(false);
+  };
+
+  const generatePDF = async () => {
+    try {
+      if (!details.responsibleParty) {
+        Alert.alert(
+          "Attention",
+          "Veuillez indiquer le responsable de l'accident"
+        );
+        return;
+      }
+
+      if (!drivers[0].name || !drivers[1].name) {
+        Alert.alert(
+          "Attention",
+          "Veuillez renseigner les noms des deux conducteurs"
+        );
+        return;
+      }
+
+      const sketchSrc = details.sketch
+        ? details.sketch.startsWith("data:")
+          ? details.sketch
+          : `data:image/png;base64,${details.sketch}`
+        : "";
+
+      const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Constat Amiable</title>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+          
+          * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+          }
+          
+          body {
+            font-family: 'Inter', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            color: #1a202c;
+            background-color: #f8fafc;
+            line-height: 1.5;
+          }
+          
+          .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+          }
+          
+          .header {
+            background: linear-gradient(135deg, #1e40af 0%, #3730a3 100%);
+            color: white;
+            padding: 24px 32px;
+            text-align: center;
+            border-bottom: 4px solid #f59e0b;
+          }
+          
+          .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            letter-spacing: 0.5px;
+          }
+          
+          .header p {
+            font-size: 16px;
+            font-weight: 300;
+            opacity: 0.9;
+          }
+          
+          .document-id {
+            background-color: #eff6ff;
+            padding: 12px 32px;
+            text-align: right;
+            font-size: 14px;
+            color: #64748b;
+            border-bottom: 1px solid #e2e8f0;
+          }
+          
+          .content {
+            padding: 32px;
+          }
+          
+          .section {
+            margin-bottom: 32px;
+            border-radius: 8px;
+            overflow: hidden;
+          }
+          
+          .section-title {
+            background-color: #f1f5f9;
+            padding: 16px 24px;
+            font-size: 18px;
+            font-weight: 600;
+            color: #1e40af;
+            border-left: 4px solid #1e40af;
+            margin-bottom: 16px;
+          }
+          
+          .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+            margin-bottom: 16px;
+          }
+          
+          .field {
+            margin-bottom: 16px;
+          }
+          
+          .label {
+            font-size: 12px;
+            font-weight: 500;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+          }
+          
+          .value {
+            font-size: 14px;
+            padding: 8px 0;
+            color: #1e293b;
+            font-weight: 500;
+            border-bottom: 1px solid #e2e8f0;
+          }
+          
+          .vehicle-section {
+            background-color: #f8fafc;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            border-left: 4px solid;
+          }
+          
+          .vehicle-a {
+            border-color: #3b82f6;
+          }
+          
+          .vehicle-b {
+            border-color: #ef4444;
+          }
+          
+          .vehicle-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+          }
+          
+          .vehicle-title::before {
+            content: "";
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+          }
+          
+          .vehicle-a .vehicle-title::before {
+            background-color: #3b82f6;
+          }
+          
+          .vehicle-b .vehicle-title::before {
+            background-color: #ef4444;
+          }
+          
+          .damage-list {
+            list-style-type: none;
+          }
+          
+          .damage-item {
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+          }
+          
+          .damage-item::before {
+            content: "•";
+            color: #64748b;
+            font-weight: bold;
+            display: inline-block;
+            width: 1em;
+            margin-right: 8px;
+          }
+          
+          .sketch-container {
+            margin: 16px 0;
+            text-align: center;
+          }
+          
+          .sketch {
+            max-width: 100%;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+          }
+          
+          .signature-section {
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 2px dashed #cbd5e1;
+          }
+          
+          .signature-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+          }
+          
+          .signature-box {
+            height: 100px;
+            border-bottom: 1px solid #cbd5e1;
+            margin-bottom: 8px;
+          }
+          
+          .signature-label {
+            font-size: 14px;
+            font-weight: 500;
+            color: #475569;
+          }
+          
+          .signature-date {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 8px;
+          }
+          
+          .footer {
+            margin-top: 48px;
+            padding: 16px 32px;
+            text-align: center;
+            font-size: 12px;
+            color: #64748b;
+            border-top: 1px solid #e2e8f0;
+            background-color: #f8fafc;
+          }
+          
+          .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            background-color: #eff6ff;
+            color: #1e40af;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+          }
+          
+          .witness-item {
+            padding: 12px 0;
+            border-bottom: 1px solid #e2e8f0;
+          }
+          
+          .empty-state {
+            color: #94a3b8;
+            font-style: italic;
+            padding: 8px 0;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>CONSTAT AMIABLE D'AUTO</h1>
+            <p>Document officiel de déclaration d'accident</p>
+          </div>
+          
+          <div class="document-id">
+            Référence: CA-${Math.random()
+              .toString(36)
+              .substring(2, 10)
+              .toUpperCase()}
+          </div>
+          
+          <div class="content">
+            <!-- General Information -->
+            <div class="section">
+              <div class="section-title">Informations Générales</div>
+              <div class="grid">
+                <div class="field">
+                  <div class="label">Date de l'accident</div>
+                  <div class="value">${details.date || "Non renseigné"}</div>
+                </div>
+                <div class="field">
+                  <div class="label">Heure de l'accident</div>
+                  <div class="value">${details.time || "Non renseigné"}</div>
+                </div>
+                <div class="field">
+                  <div class="label">Responsable selon vous</div>
+                  <div class="value">
+                    <span class="badge">
+                      ${
+                        details.responsibleParty === "A"
+                          ? "Véhicule A"
+                          : "Véhicule B"
+                      }
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div class="field">
+                <div class="label">Description des circonstances</div>
+                <div class="value">${
+                  details.description || "Non renseigné"
+                }</div>
+              </div>
+            </div>
+            
+            <!-- Drivers Information -->
+            <div class="section">
+              <div class="section-title">Informations des Conducteurs</div>
+              
+              <div class="vehicle-section vehicle-a">
+                <div class="vehicle-title">Véhicule A</div>
+                <div class="grid">
+                  <div class="field">
+                    <div class="label">Nom complet</div>
+                    <div class="value">${
+                      drivers[0].name || "Non renseigné"
+                    }</div>
+                  </div>
+                  <div class="field">
+                    <div class="label">N° de permis</div>
+                    <div class="value">${
+                      drivers[0].licenseNumber || "Non renseigné"
+                    }</div>
+                  </div>
+                  <div class="field">
+                    <div class="label">Téléphone</div>
+                    <div class="value">${
+                      drivers[0].phone || "Non renseigné"
+                    }</div>
+                  </div>
+                </div>
+                <div class="field">
+                  <div class="label">Adresse</div>
+                  <div class="value">${
+                    drivers[0].address || "Non renseigné"
+                  }</div>
+                </div>
+                <div class="grid">
+                  <div class="field">
+                    <div class="label">Assurance</div>
+                    <div class="value">${
+                      drivers[0].insuranceCompany || "Non renseigné"
+                    }</div>
+                  </div>
+                  <div class="field">
+                    <div class="label">N° de police</div>
+                    <div class="value">${
+                      drivers[0].policyNumber || "Non renseigné"
+                    }</div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="vehicle-section vehicle-b">
+                <div class="vehicle-title">Véhicule B</div>
+                <div class="grid">
+                  <div class="field">
+                    <div class="label">Nom complet</div>
+                    <div class="value">${
+                      drivers[1].name || "Non renseigné"
+                    }</div>
+                  </div>
+                  <div class="field">
+                    <div class="label">N° de permis</div>
+                    <div class="value">${
+                      drivers[1].licenseNumber || "Non renseigné"
+                    }</div>
+                  </div>
+                  <div class="field">
+                    <div class="label">Téléphone</div>
+                    <div class="value">${
+                      drivers[1].phone || "Non renseigné"
+                    }</div>
+                  </div>
+                </div>
+                <div class="field">
+                  <div class="label">Adresse</div>
+                  <div class="value">${
+                    drivers[1].address || "Non renseigné"
+                  }</div>
+                </div>
+                <div class="grid">
+                  <div class="field">
+                    <div class="label">Assurance</div>
+                    <div class="value">${
+                      drivers[1].insuranceCompany || "Non renseigné"
+                    }</div>
+                  </div>
+                  <div class="field">
+                    <div class="label">N° de police</div>
+                    <div class="value">${
+                      drivers[1].policyNumber || "Non renseigné"
+                    }</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Vehicles Information -->
+            <div class="section">
+              <div class="section-title">Informations des Véhicules</div>
+              
+              <div class="vehicle-section vehicle-a">
+                <div class="vehicle-title">Véhicule A</div>
+                <div class="grid">
+                  <div class="field">
+                    <div class="label">Marque</div>
+                    <div class="value">${
+                      vehicles[0].make || "Non renseigné"
+                    }</div>
+                  </div>
+                  <div class="field">
+                    <div class="label">Modèle</div>
+                    <div class="value">${
+                      vehicles[0].model || "Non renseigné"
+                    }</div>
+                  </div>
+                  <div class="field">
+                    <div class="label">Année</div>
+                    <div class="value">${
+                      vehicles[0].year || "Non renseigné"
+                    }</div>
+                  </div>
+                </div>
+                <div class="grid">
+                  <div class="field">
+                    <div class="label">Plaque d'immatriculation</div>
+                    <div class="value">${
+                      vehicles[0].licensePlate || "Non renseigné"
+                    }</div>
+                  </div>
+                  <div class="field">
+                    <div class="label">VIN</div>
+                    <div class="value">${
+                      vehicles[0].vin || "Non renseigné"
+                    }</div>
+                  </div>
+                  <div class="field">
+                    <div class="label">Couleur</div>
+                    <div class="value">${
+                      vehicles[0].color || "Non renseigné"
+                    }</div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="vehicle-section vehicle-b">
+                <div class="vehicle-title">Véhicule B</div>
+                <div class="grid">
+                  <div class="field">
+                    <div class="label">Marque</div>
+                    <div class="value">${
+                      vehicles[1].make || "Non renseigné"
+                    }</div>
+                  </div>
+                  <div class="field">
+                    <div class="label">Modèle</div>
+                    <div class="value">${
+                      vehicles[1].model || "Non renseigné"
+                    }</div>
+                  </div>
+                  <div class="field">
+                    <div class="label">Année</div>
+                    <div class="value">${
+                      vehicles[1].year || "Non renseigné"
+                    }</div>
+                  </div>
+                </div>
+                <div class="grid">
+                  <div class="field">
+                    <div class="label">Plaque d'immatriculation</div>
+                    <div class="value">${
+                      vehicles[1].licensePlate || "Non renseigné"
+                    }</div>
+                  </div>
+                  <div class="field">
+                    <div class="label">VIN</div>
+                    <div class="value">${
+                      vehicles[1].vin || "Non renseigné"
+                    }</div>
+                  </div>
+                  <div class="field">
+                    <div class="label">Couleur</div>
+                    <div class="value">${
+                      vehicles[1].color || "Non renseigné"
+                    }</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Location and Details -->
+            <div class="section">
+              <div class="section-title">Lieu et Détails de l'Accident</div>
+              
+              <div class="grid">
+                <div class="field">
+                  <div class="label">Adresse</div>
+                  <div class="value">${
+                    location.address || "Non renseigné"
+                  }</div>
+                </div>
+                <div class="field">
+                  <div class="label">Ville</div>
+                  <div class="value">${location.city || "Non renseigné"}</div>
+                </div>
+                <div class="field">
+                  <div class="label">Code postal</div>
+                  <div class="value">${
+                    location.zipCode || "Non renseigné"
+                  }</div>
+                </div>
+                <div class="field">
+                  <div class="label">Pays</div>
+                  <div class="value">${
+                    location.country || "Non renseigné"
+                  }</div>
+                </div>
+              </div>
+              
+              <div class="field">
+                <div class="label">Description du lieu</div>
+                <div class="value">${
+                  location.description || "Non renseigné"
+                }</div>
+              </div>
+              
+              <div class="field">
+                <div class="label">Dégâts constatés</div>
+                <ul class="damage-list">
+                  ${
+                    details.damages.length > 0
+                      ? details.damages
+                          .map(
+                            (damage) => `<li class="damage-item">${damage}</li>`
+                          )
+                          .join("")
+                      : '<li class="empty-state">Aucun dégât enregistré</li>'
+                  }
+                </ul>
+              </div>
+              
+              ${
+                sketchSrc
+                  ? `
+              <div class="field">
+                <div class="label">Croquis de l'accident</div>
+                <div class="sketch-container">
+                  <img class="sketch" src="${sketchSrc}" />
+                </div>
+              </div>
+              `
+                  : ""
+              }
+
+              <div class="field">
+                <div class="label">Témoins</div>
+                ${
+                  details.witnesses.length > 0
+                    ? details.witnesses
+                        .map(
+                          (witness) => `
+                        <div class="witness-item">
+                          <strong>${witness.name}</strong>
+                          <div>${
+                            witness.contact || "Contact non renseigné"
+                          }</div>
+                        </div>
+                      `
+                        )
+                        .join("")
+                    : '<div class="empty-state">Aucun témoin enregistré</div>'
+                }
+              </div>
+            </div>
+            
+            <!-- Signatures -->
+            <div class="signature-section">
+              <div class="section-title">Signatures des Conducteurs</div>
+              
+              <div class="signature-grid">
+                <div class="field">
+                  <div class="signature-label">Conducteur du Véhicule A</div>
+                  <div class="signature-box"></div>
+                  <div class="signature-date">Date: _________________</div>
+                </div>
+                
+                <div class="field">
+                  <div class="signature-label">Conducteur du Véhicule B</div>
+                  <div class="signature-box"></div>
+                  <div class="signature-date">Date: _________________</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="footer">
+            Document généré électroniquement le ${new Date().toLocaleDateString(
+              "fr-FR",
+              {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              }
+            )} à ${new Date().toLocaleTimeString("fr-FR")}
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "application/pdf",
+          dialogTitle: "Partager le constat PDF",
+          UTI: "com.adobe.pdf",
+        });
+      }
+
+      Alert.alert("Succès", "PDF généré avec succès!");
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      Alert.alert("Erreur", "Impossible de générer le PDF");
+    }
+  };
+
   const handleSubmit = () => {
+    // Basic validation
+    if (!details.responsibleParty) {
+      Alert.alert(
+        "Attention",
+        "Veuillez indiquer le responsable de l'accident"
+      );
+      return;
+    }
+
+    if (!drivers[0].name || !drivers[1].name) {
+      Alert.alert(
+        "Attention",
+        "Veuillez renseigner les noms des deux conducteurs"
+      );
+      return;
+    }
+
     console.log("Form submitted:", { drivers, vehicles, location, details });
     Alert.alert("Succès", "Constat enregistré avec succès!");
   };
@@ -342,7 +1078,19 @@ const ConstatForm: React.FC = () => {
             textAlignVertical="top"
           />
         </View>
-        <Sketch/>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Croquis de l'accident</Text>
+          <TouchableOpacity
+            style={styles.sketchButton}
+            onPress={() => setSketchModalVisible(true)}
+          >
+            <ImageIcon size={18} color="#3b82f6" />
+            <Text style={styles.sketchButtonText}>
+              {details.sketch ? "Modifier le croquis" : "Créer un croquis"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </Animated.View>
   );
@@ -742,26 +1490,36 @@ const ConstatForm: React.FC = () => {
       <View style={styles.formSection}>
         <Text style={styles.subSectionTitle}>Témoins</Text>
         <View style={styles.witnessContainer}>
-          {details.witnesses.map((witness, index) => (
-            <View key={index} style={styles.witnessItem}>
-              <Text style={styles.witnessText}>{witness}</Text>
-              <TouchableOpacity
-                onPress={() =>
-                  handleDetailsChange(
-                    "witnesses",
-                    details.witnesses.filter((_, i) => i !== index)
-                  )
-                }
-              >
-                <X size={16} color="#dc2626" />
-              </TouchableOpacity>
+          {details.witnesses.map((witness) => (
+            <View key={witness.id} style={styles.witnessItem}>
+              <View style={styles.witnessInfo}>
+                <Text style={styles.witnessName}>{witness.name}</Text>
+                {witness.contact ? (
+                  <Text style={styles.witnessContact}>{witness.contact}</Text>
+                ) : null}
+              </View>
+              <View style={styles.witnessActions}>
+                <TouchableOpacity
+                  onPress={() => openWitnessModal(witness)}
+                  style={styles.witnessActionButton}
+                >
+                  <Edit3 size={16} color="#3b82f6" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => removeWitness(witness.id)}
+                  style={styles.witnessActionButton}
+                >
+                  <X size={16} color="#dc2626" />
+                </TouchableOpacity>
+              </View>
             </View>
           ))}
           <TouchableOpacity
             style={styles.addWitnessButton}
-            onPress={handleWitnessAdd}
+            onPress={() => openWitnessModal()}
           >
-            <Text style={styles.addWitnessText}>+ Ajouter un témoin</Text>
+            <Plus size={16} color="#3b82f6" />
+            <Text style={styles.addWitnessText}>Ajouter un témoin</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -769,7 +1527,10 @@ const ConstatForm: React.FC = () => {
   );
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
       <View style={styles.header}>
         <Text style={styles.title}>CONSTAT AMIABLE</Text>
         <Text style={styles.subtitle}>Accident Automobile</Text>
@@ -823,7 +1584,11 @@ const ConstatForm: React.FC = () => {
       </View>
 
       {/* Form steps */}
-      <ScrollView style={styles.formContainer}>
+      <ScrollView
+        style={styles.formContainer}
+        contentContainerStyle={styles.formContentContainer}
+        keyboardShouldPersistTaps="handled"
+      >
         {step === 1 && renderStep1()}
         {step === 2 && renderStep2()}
         {step === 3 && renderStep3()}
@@ -855,7 +1620,19 @@ const ConstatForm: React.FC = () => {
           <Text style={styles.stepIndicatorText}>Étape {step} sur 4</Text>
         </View>
 
-        {step < 4 ? (
+        {step === 4 && (
+          <TouchableOpacity
+            onPress={generatePDF}
+            style={[styles.navButton, styles.navButtonPdf]}
+          >
+            <Download size={16} color="white" />
+            <Text style={[styles.navButtonText, { color: "white" }]}>
+              Générer PDF
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {step <= 3 ? (
           <TouchableOpacity
             onPress={nextStep}
             style={[styles.navButton, styles.navButtonNext]}
@@ -877,7 +1654,126 @@ const ConstatForm: React.FC = () => {
           </TouchableOpacity>
         )}
       </View>
-    </View>
+
+      {/* Sketch Modal */}
+      <Modal
+        animationType="slide"
+        transparent={false}
+        visible={sketchModalVisible}
+        onRequestClose={() => setSketchModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Croquis de l'accident</Text>
+            <TouchableOpacity
+              onPress={() => setSketchModalVisible(false)}
+              style={styles.closeButton}
+            >
+              <X size={24} color="#374151" />
+            </TouchableOpacity>
+          </View>
+          <View
+            style={[
+              styles.sketchContainer,
+              { padding: 8, backgroundColor: "#f1f5f9" },
+            ]}
+          >
+            <SketchComponent
+              onSave={handleSketchSave}
+              initialData={details.sketch}
+            />
+          </View>
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalButtonSecondary]}
+              onPress={() => setSketchModalVisible(false)}
+            >
+              <Text style={styles.modalButtonTextSecondary}>Annuler</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalButtonPrimary]}
+              onPress={() => {
+                // This would typically be handled by the Sketch component's save functionality
+                setSketchModalVisible(false);
+              }}
+            >
+              <Text style={styles.modalButtonTextPrimary}>Enregistrer</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Witness Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={witnessModalVisible}
+        onRequestClose={() => setWitnessModalVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.witnessModalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>
+                  {isEditingWitness
+                    ? "Modifier le témoin"
+                    : "Ajouter un témoin"}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setWitnessModalVisible(false)}
+                  style={styles.closeButton}
+                >
+                  <X size={24} color="#374151" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.witnessForm}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Nom du témoin</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={currentWitness.name}
+                    onChangeText={(text) =>
+                      setCurrentWitness({ ...currentWitness, name: text })
+                    }
+                    placeholder="Nom complet"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Coordonnées</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={currentWitness.contact}
+                    onChangeText={(text) =>
+                      setCurrentWitness({ ...currentWitness, contact: text })
+                    }
+                    placeholder="Téléphone ou email"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonSecondary]}
+                  onPress={() => setWitnessModalVisible(false)}
+                >
+                  <Text style={styles.modalButtonTextSecondary}>Annuler</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonPrimary]}
+                  onPress={saveWitness}
+                >
+                  <Text style={styles.modalButtonTextPrimary}>
+                    {isEditingWitness ? "Modifier" : "Ajouter"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -977,6 +1873,8 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     flex: 1,
+  },
+  formContentContainer: {
     padding: 16,
   },
   stepContainer: {
@@ -1097,6 +1995,21 @@ const styles = StyleSheet.create({
   responsibilityButtonTextSelected: {
     color: "white",
   },
+  sketchButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 12,
+    backgroundColor: "#f0f9ff",
+    borderWidth: 1,
+    borderColor: "#bae6fd",
+    borderRadius: 6,
+    gap: 8,
+  },
+  sketchButtonText: {
+    color: "#0c4a6e",
+    fontWeight: "500",
+  },
   damageContainer: {
     gap: 12,
   },
@@ -1164,22 +2077,41 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
   },
-  witnessText: {
-    fontSize: 13,
-    color: "#374151",
+  witnessInfo: {
     flex: 1,
   },
+  witnessName: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#374151",
+  },
+  witnessContact: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 2,
+  },
+  witnessActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  witnessActionButton: {
+    padding: 4,
+  },
   addWitnessButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     padding: 14,
     borderWidth: 1,
     borderColor: "#d1d5db",
     borderStyle: "dashed",
     borderRadius: 6,
-    alignItems: "center",
+    gap: 8,
   },
   addWitnessText: {
-    color: "#6b7280",
+    color: "#3b82f6",
     fontSize: 13,
+    fontWeight: "500",
   },
   navigationButtons: {
     flexDirection: "row",
@@ -1232,6 +2164,79 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
     color: "#64748b",
+  },
+  // Modal Styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "white",
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    padding: 20,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1f2937",
+  },
+  closeButton: {
+    padding: 4,
+  },
+  sketchContainer: {
+    flex: 1,
+  },
+  witnessModalContent: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    width: "100%",
+    maxWidth: 400,
+    overflow: "hidden",
+  },
+  witnessForm: {
+    padding: 16,
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+  },
+  modalButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    minWidth: 80,
+    alignItems: "center",
+  },
+  modalButtonPrimary: {
+    backgroundColor: "#3b82f6",
+  },
+  modalButtonSecondary: {
+    backgroundColor: "#f3f4f6",
+  },
+  modalButtonTextPrimary: {
+    color: "white",
+    fontWeight: "600",
+  },
+  modalButtonTextSecondary: {
+    color: "#374151",
+    fontWeight: "600",
+  },
+  navButtonPdf: {
+    backgroundColor: "#8b5cf6",
   },
 });
 

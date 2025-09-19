@@ -27,11 +27,33 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="ConstatForm"
+        options={{
+          title: "New Constat",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="doc.badge.plus" color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="PastConstat"
+        options={{
+          title: "My Constats",
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="doc.text.fill" color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="paperplane.fill" color={color} />
+            <IconSymbol
+              size={28}
+              name="person.crop.circle.fill"
+              color={color}
+            />
           ),
         }}
       />
@@ -40,16 +62,7 @@ export default function TabLayout() {
         options={{
           title: "Login",
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="paperplane.fill" color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="constatForm"
-        options={{
-          title: "ConstatForm",
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="paperplane.fill" color={color} />
+            <IconSymbol size={28} name="person.fill" color={color} />
           ),
         }}
       />
