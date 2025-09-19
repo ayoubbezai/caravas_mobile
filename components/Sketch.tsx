@@ -12,6 +12,7 @@ import {
   StatusBar,
   ScrollView,
   TextStyle,
+  Platform,
 } from "react-native";
 
 type ElementType =
@@ -253,10 +254,14 @@ const VehicleShape: React.FC<{
 
       {/* Label */}
       <View style={styles.labelContainer}>
-        <Text style={[
-          styles.vehicleLabel,
-          { fontSize: Math.max(8, Math.round(9 * uiScale)) as any }
-        ]}>{element.label}</Text>
+        <Text
+          style={[
+            styles.vehicleLabel,
+            { fontSize: Math.max(8, Math.round(9 * uiScale)) as any },
+          ]}
+        >
+          {element.label}
+        </Text>
       </View>
     </View>
   );
@@ -290,7 +295,10 @@ const DraggableElement: React.FC<{
       const newX = snapToGrid(
         Math.max(
           10,
-          Math.min(canvasWidth - element.width - 10, getAnimValue(element.position.x))
+          Math.min(
+            canvasWidth - element.width - 10,
+            getAnimValue(element.position.x)
+          )
         )
       );
       const newY = snapToGrid(
@@ -468,7 +476,10 @@ const getElementSymbol = (type: ElementType) => {
 };
 
 const getTextStyle = (type: ElementType): TextStyle => {
-  const baseStyle: TextStyle = { fontSize: 8, fontWeight: "600" as TextStyle["fontWeight"] };
+  const baseStyle: TextStyle = {
+    fontSize: 8,
+    fontWeight: "600" as TextStyle["fontWeight"],
+  };
 
   switch (type) {
     case "road_straight":
@@ -482,19 +493,25 @@ const getTextStyle = (type: ElementType): TextStyle => {
   }
 };
 
-const Sketch: React.FC = () => {
+export const Sketch: React.FC = () => {
   const [elements, setElements] = useState<AccidentElement[]>([
     {
       id: "car_a",
       type: "car_a",
-      position: new Animated.ValueXY({ x: scaleValue(100), y: scaleValue(200) }),
+      position: new Animated.ValueXY({
+        x: scaleValue(100),
+        y: scaleValue(200),
+      }),
       rotation: new Animated.Value(0),
       ...getScaledConfig("car_a"),
     },
     {
       id: "car_b",
       type: "car_b",
-      position: new Animated.ValueXY({ x: scaleValue(200), y: scaleValue(250) }),
+      position: new Animated.ValueXY({
+        x: scaleValue(200),
+        y: scaleValue(250),
+      }),
       rotation: new Animated.Value(90),
       ...getScaledConfig("car_b"),
     },
@@ -504,19 +521,22 @@ const Sketch: React.FC = () => {
     "car_a"
   );
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showControls, setShowControls] = useState(false);
+  const [showAddControls, setShowAddControls] = useState(false);
 
+  // Sidebar width based on screen size
+  const sidebarWidth = screenWidth > 600 ? 80 : 60;
   const canvasHeight = isFullscreen
     ? screenHeight
-    : Math.max(300, Math.min(screenHeight * 0.6, 520 * uiScale));
-  const canvasWidth = screenWidth - 20;
+    : Math.max(300, Math.min(screenHeight * 0.65, 520 * uiScale));
+  const canvasWidth = screenWidth - sidebarWidth - 20;
 
   const rotateSelected = (degrees: number) => {
     if (!selectedElement) return;
     const element = elements.find((e) => e.id === selectedElement);
     if (element) {
       // Rotate in place without moving the element
-      const newRotation = (getAnimValue(element.rotation) + degrees + 360) % 360;
+      const newRotation =
+        (getAnimValue(element.rotation) + degrees + 360) % 360;
       Animated.spring(element.rotation, {
         toValue: newRotation,
         useNativeDriver: false,
@@ -557,6 +577,7 @@ const Sketch: React.FC = () => {
 
     setElements([...elements, newElement]);
     setSelectedElement(newElement.id);
+    setShowAddControls(false); // Close add panel after adding
   };
 
   const duplicateSelected = () => {
@@ -610,23 +631,13 @@ const Sketch: React.FC = () => {
       {/* Header */}
       {!isFullscreen && (
         <View style={styles.header}>
-            <Text style={styles.title}>🚗 Accident Sketch</Text>
-          <View style={styles.headerButtons}>
-            <TouchableOpacity
-              style={styles.headerBtn}
-              onPress={() => setShowControls(!showControls)}
-            >
-              <Text style={styles.headerBtnText}>
-                {showControls ? "⬇️" : "⬆️"}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.headerBtn}
-              onPress={() => setIsFullscreen(true)}
-            >
-              <Text style={styles.headerBtnText}>⛶</Text>
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.title}>🚗 Sketch</Text>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => setIsFullscreen(true)}
+          >
+            <Text style={styles.headerBtnText}>Fullscreen</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -637,275 +648,228 @@ const Sketch: React.FC = () => {
             style={styles.exitFullscreenBtn}
             onPress={() => setIsFullscreen(false)}
           >
-            <Text style={styles.exitFullscreenText}>✕ Exit Fullscreen</Text>
+            <Text style={styles.exitFullscreenText}>✕ Exit</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Canvas */}
-      <View style={[styles.canvas, { height: canvasHeight }]}>
-        <View style={styles.canvasBackground}>
-          {/* Grid */}
-          <View style={styles.gridPattern} />
+      <View style={styles.mainContent}>
+        {/* Persistent Sidebar */}
+        <View style={[styles.sidebar, { width: sidebarWidth }]}>
+          <ScrollView
+            contentContainerStyle={styles.sidebarContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Rotation Controls */}
+            <View style={styles.sidebarSection}>
+              <Text style={styles.sidebarSectionTitle}>Rotate</Text>
+              <TouchableOpacity
+                style={styles.sidebarBtn}
+                onPress={() => rotateSelected(-15)}
+                disabled={!selectedElement}
+              >
+                <Text style={styles.sidebarBtnText}>↺</Text>
+                <Text style={styles.sidebarBtnSubText}>-15°</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.sidebarBtn}
+                onPress={() => rotateSelected(15)}
+                disabled={!selectedElement}
+              >
+                <Text style={styles.sidebarBtnText}>↻</Text>
+                <Text style={styles.sidebarBtnSubText}>+15°</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.sidebarBtn}
+                onPress={() => rotateSelected(90)}
+                disabled={!selectedElement}
+              >
+                <Text style={styles.sidebarBtnText}>↻</Text>
+                <Text style={styles.sidebarBtnSubText}>90°</Text>
+              </TouchableOpacity>
+            </View>
 
-          {elements
-            .sort((a, b) => a.zIndex - b.zIndex)
-            .map((element) => (
-              <DraggableElement
-                key={element.id}
-                element={element}
-                onSelect={setSelectedElement}
-                isSelected={selectedElement === element.id}
-                canvasWidth={canvasWidth}
-                canvasHeight={canvasHeight}
-              />
-            ))}
+            {/* Layer Controls */}
+            <View style={styles.sidebarSection}>
+              <Text style={styles.sidebarSectionTitle}>Layer</Text>
+              <TouchableOpacity
+                style={styles.sidebarBtn}
+                onPress={() => changeZIndex("up")}
+                disabled={!selectedElement}
+              >
+                <Text style={styles.sidebarBtnText}>⬆</Text>
+                <Text style={styles.sidebarBtnSubText}>Up</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.sidebarBtn}
+                onPress={() => changeZIndex("down")}
+                disabled={!selectedElement}
+              >
+                <Text style={styles.sidebarBtnText}>⬇</Text>
+                <Text style={styles.sidebarBtnSubText}>Down</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Quick Actions */}
+            <View style={styles.sidebarSection}>
+              <Text style={styles.sidebarSectionTitle}>Actions</Text>
+              <TouchableOpacity
+                style={styles.sidebarBtn}
+                onPress={() => setShowAddControls(!showAddControls)}
+              >
+                <Text style={styles.sidebarBtnText}>➕</Text>
+                <Text style={styles.sidebarBtnSubText}>Add</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.sidebarBtn}
+                onPress={duplicateSelected}
+                disabled={!selectedElement}
+              >
+                <Text style={styles.sidebarBtnText}>📋</Text>
+                <Text style={styles.sidebarBtnSubText}>Copy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.sidebarBtn, styles.deleteBtn]}
+                onPress={deleteSelected}
+                disabled={!selectedElement}
+              >
+                <Text style={styles.sidebarBtnText}>🗑</Text>
+                <Text style={styles.sidebarBtnSubText}>Del</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+
+        {/* Main Canvas Area */}
+        <View style={styles.canvasArea}>
+          {/* Element Info Bar */}
+          {selectedEl && !isFullscreen && (
+            <View style={styles.infoBar}>
+              <Text style={styles.infoText}>
+                <Text style={styles.infoHighlight}>{selectedEl.label}</Text> •
+                {Math.round(getAnimValue(selectedEl.rotation))}° • Layer{" "}
+                {selectedEl.zIndex}
+              </Text>
+            </View>
+          )}
+
+          {/* Canvas */}
+          <View
+            style={[
+              styles.canvas,
+              { height: canvasHeight, width: canvasWidth },
+            ]}
+          >
+            <View style={styles.canvasBackground}>
+              {/* Grid */}
+              <View style={styles.gridPattern} />
+
+              {elements
+                .sort((a, b) => a.zIndex - b.zIndex)
+                .map((element) => (
+                  <DraggableElement
+                    key={element.id}
+                    element={element}
+                    onSelect={setSelectedElement}
+                    isSelected={selectedElement === element.id}
+                    canvasWidth={canvasWidth}
+                    canvasHeight={canvasHeight}
+                  />
+                ))}
+            </View>
+          </View>
         </View>
       </View>
 
-      {/* Element Info */}
-      {selectedEl && !isFullscreen && (
-        <View style={styles.infoBar}>
-          <Text style={styles.infoText}>
-            <Text style={styles.infoHighlight}>{selectedEl.label}</Text> •
-            Angle: {Math.round(getAnimValue(selectedEl.rotation))}° • Layer:{" "}
-            {selectedEl.zIndex}
-          </Text>
-        </View>
-      )}
-
-      {/* Controls */}
-      {showControls && !isFullscreen && (
-        <ScrollView
-          style={styles.controlsContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Quick Actions */}
-          <View style={styles.quickActions}>
-            <TouchableOpacity
-              style={styles.quickBtn}
-              onPress={() => rotateSelected(-15)}
-            >
-              <Text style={styles.quickBtnText}>↺ -15°</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.quickBtn}
-              onPress={() => rotateSelected(15)}
-            >
-              <Text style={styles.quickBtnText}>↻ +15°</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.quickBtn}
-              onPress={() => rotateSelected(90)}
-            >
-              <Text style={styles.quickBtnText}>↻ 90°</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.quickBtn}
-              onPress={() => changeZIndex("up")}
-            >
-              <Text style={styles.quickBtnText}>⬆ Layer</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.quickBtn}
-              onPress={() => changeZIndex("down")}
-            >
-              <Text style={styles.quickBtnText}>⬇ Layer</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Add Vehicles */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🚗 Vehicles</Text>
-            <View style={styles.buttonGrid}>
-              <TouchableOpacity
-                style={[
-                  styles.addBtn,
-                  { backgroundColor: (BASE_ELEMENTS as any).car_a.color },
-                ]}
-                onPress={() => addElement("car_a")}
-              >
-                <Text style={styles.addBtnText}>Car A</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.addBtn,
-                  { backgroundColor: (BASE_ELEMENTS as any).car_b.color },
-                ]}
-                onPress={() => addElement("car_b")}
-              >
-                <Text style={styles.addBtnText}>Car B</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.addBtn,
-                  { backgroundColor: (BASE_ELEMENTS as any).car_c.color },
-                ]}
-                onPress={() => addElement("car_c")}
-              >
-                <Text style={styles.addBtnText}>Car C</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.addBtn,
-                  { backgroundColor: (BASE_ELEMENTS as any).truck.color },
-                ]}
-                onPress={() => addElement("truck")}
-              >
-                <Text style={styles.addBtnText}>Truck</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.addBtn,
-                  { backgroundColor: (BASE_ELEMENTS as any).motorcycle.color },
-                ]}
-                onPress={() => addElement("motorcycle")}
-              >
-                <Text style={styles.addBtnText}>Motorcycle</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.addBtn,
-                  { backgroundColor: (BASE_ELEMENTS as any).bus.color },
-                ]}
-                onPress={() => addElement("bus")}
-              >
-                <Text style={styles.addBtnText}>Bus</Text>
+      {/* Add Controls Modal */}
+      {showAddControls && (
+        <View style={styles.addControlsModal}>
+          <View style={styles.addControlsContent}>
+            <View style={styles.addControlsHeader}>
+              <Text style={styles.addControlsTitle}>Add Elements</Text>
+              <TouchableOpacity onPress={() => setShowAddControls(false)}>
+                <Text style={styles.addControlsClose}>✕</Text>
               </TouchableOpacity>
             </View>
-          </View>
 
-          {/* Add Infrastructure */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🛣️ Roads & Infrastructure</Text>
-            <View style={styles.buttonGrid}>
-              <TouchableOpacity
-                style={[
-                  styles.addBtn,
-                  { backgroundColor: (BASE_ELEMENTS as any).road_straight.color },
-                ]}
-                onPress={() => addElement("road_straight")}
-              >
-                <Text style={styles.addBtnText}>Road</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.addBtn,
-                  { backgroundColor: (BASE_ELEMENTS as any).intersection.color },
-                ]}
-                onPress={() => addElement("intersection")}
-              >
-                <Text style={styles.addBtnText}>Intersection</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.addBtn,
-                  { backgroundColor: (BASE_ELEMENTS as any).roundabout.color },
-                ]}
-                onPress={() => addElement("roundabout")}
-              >
-                <Text style={styles.addBtnText}>Roundabout</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.addBtn,
-                  { backgroundColor: (BASE_ELEMENTS as any).traffic_light.color },
-                ]}
-                onPress={() => addElement("traffic_light")}
-              >
-                <Text style={styles.addBtnText}>Traffic Light</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.addBtn,
-                  { backgroundColor: (BASE_ELEMENTS as any).stop_sign.color },
-                ]}
-                onPress={() => addElement("stop_sign")}
-              >
-                <Text style={styles.addBtnText}>Stop Sign</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+            <ScrollView style={styles.addControlsScroll}>
+              {/* Vehicles */}
+              <View style={styles.addSection}>
+                <Text style={styles.addSectionTitle}>🚗 Vehicles</Text>
+                <View style={styles.addButtonGrid}>
+                  {[
+                    "car_a",
+                    "car_b",
+                    "car_c",
+                    "truck",
+                    "motorcycle",
+                    "bus",
+                  ].map((type) => (
+                    <TouchableOpacity
+                      key={type}
+                      style={[
+                        styles.addBtn,
+                        { backgroundColor: (BASE_ELEMENTS as any)[type].color },
+                      ]}
+                      onPress={() => addElement(type as ElementType)}
+                    >
+                      <Text style={styles.addBtnText}>
+                        {(BASE_ELEMENTS as any)[type].label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
 
-          {/* Add Evidence */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🔍 Evidence</Text>
-            <View style={styles.buttonGrid}>
-              <TouchableOpacity
-                style={[
-                  styles.addBtn,
-                  { backgroundColor: (BASE_ELEMENTS as any).impact.color },
-                ]}
-                onPress={() => addElement("impact")}
-              >
-                <Text style={styles.addBtnText}>💥 Impact</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.addBtn,
-                  { backgroundColor: (BASE_ELEMENTS as any).debris.color },
-                ]}
-                onPress={() => addElement("debris")}
-              >
-                <Text style={styles.addBtnText}>⚡ Debris</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.addBtn,
-                  { backgroundColor: (BASE_ELEMENTS as any).skid_marks.color },
-                ]}
-                onPress={() => addElement("skid_marks")}
-              >
-                <Text style={styles.addBtnText}>~~~ Skids</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+              {/* Roads */}
+              <View style={styles.addSection}>
+                <Text style={styles.addSectionTitle}>🛣️ Infrastructure</Text>
+                <View style={styles.addButtonGrid}>
+                  {[
+                    "road_straight",
+                    "intersection",
+                    "roundabout",
+                    "traffic_light",
+                    "stop_sign",
+                  ].map((type) => (
+                    <TouchableOpacity
+                      key={type}
+                      style={[
+                        styles.addBtn,
+                        { backgroundColor: (BASE_ELEMENTS as any)[type].color },
+                      ]}
+                      onPress={() => addElement(type as ElementType)}
+                    >
+                      <Text style={styles.addBtnText}>
+                        {(BASE_ELEMENTS as any)[type].label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
 
-          {/* Actions */}
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={duplicateSelected}
-            >
-              <Text style={styles.actionBtnText}>📋 Duplicate</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.deleteBtn]}
-              onPress={deleteSelected}
-            >
-              <Text style={styles.actionBtnText}>🗑️ Delete</Text>
-            </TouchableOpacity>
+              {/* Evidence */}
+              <View style={styles.addSection}>
+                <Text style={styles.addSectionTitle}>🔍 Evidence</Text>
+                <View style={styles.addButtonGrid}>
+                  {["impact", "debris", "skid_marks"].map((type) => (
+                    <TouchableOpacity
+                      key={type}
+                      style={[
+                        styles.addBtn,
+                        { backgroundColor: (BASE_ELEMENTS as any)[type].color },
+                      ]}
+                      onPress={() => addElement(type as ElementType)}
+                    >
+                      <Text style={styles.addBtnText}>
+                        {(BASE_ELEMENTS as any)[type].label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </ScrollView>
           </View>
-        </ScrollView>
-      )}
-
-      {/* Fullscreen Floating Controls */}
-      {isFullscreen && (
-        <View style={styles.floatingControls}>
-          <TouchableOpacity
-            style={styles.floatingBtn}
-            onPress={() => rotateSelected(-15)}
-          >
-            <Text style={styles.floatingBtnText}>↺</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.floatingBtn}
-            onPress={() => rotateSelected(15)}
-          >
-            <Text style={styles.floatingBtnText}>↻</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.floatingBtn}
-            onPress={() => changeZIndex("up")}
-          >
-            <Text style={styles.floatingBtnText}>⬆</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.floatingBtn}
-            onPress={() => changeZIndex("down")}
-          >
-            <Text style={styles.floatingBtnText}>⬇</Text>
-          </TouchableOpacity>
         </View>
       )}
     </View>
@@ -924,9 +888,9 @@ const styles = StyleSheet.create({
   // Header
   header: {
     backgroundColor: "#1e293b",
-    paddingTop: 50,
-    paddingBottom: 15,
-    paddingHorizontal: 20,
+    paddingTop: Platform.OS === "ios" ? 50 : 20,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -936,10 +900,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#ffffff",
   },
-  headerButtons: {
-    flexDirection: "row",
-    gap: 10,
-  },
   headerBtn: {
     backgroundColor: "#475569",
     paddingHorizontal: 12,
@@ -948,7 +908,7 @@ const styles = StyleSheet.create({
   },
   headerBtnText: {
     color: "#ffffff",
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: "600",
   },
 
@@ -971,10 +931,83 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
+  // Main Layout
+  mainContent: {
+    flex: 1,
+    flexDirection: "row",
+  },
+
+  // Sidebar
+  sidebar: {
+    backgroundColor: "#1e293b",
+    paddingVertical: 12,
+    borderRightWidth: 1,
+    borderRightColor: "#475569",
+  },
+  sidebarContent: {
+    alignItems: "center",
+    paddingHorizontal: 8,
+  },
+  sidebarSection: {
+    marginBottom: 20,
+    alignItems: "center",
+  },
+  sidebarSectionTitle: {
+    color: "#e2e8f0",
+    fontSize: 10,
+    fontWeight: "600",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  sidebarBtn: {
+    backgroundColor: "#3b82f6",
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  sidebarBtnText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  sidebarBtnSubText: {
+    color: "#ffffff",
+    fontSize: 8,
+    fontWeight: "600",
+    marginTop: -2,
+  },
+  deleteBtn: {
+    backgroundColor: "#ef4444",
+  },
+
+  // Canvas Area
+  canvasArea: {
+    flex: 1,
+    padding: 10,
+  },
+  infoBar: {
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginBottom: 10,
+    elevation: 2,
+  },
+  infoText: {
+    fontSize: 12,
+    color: "#374151",
+    textAlign: "center",
+  },
+  infoHighlight: {
+    fontWeight: "bold",
+    color: "#1d4ed8",
+  },
+
   // Canvas
   canvas: {
-    marginHorizontal: 10,
-    marginTop: 10,
     borderRadius: 12,
     overflow: "hidden",
     elevation: 4,
@@ -1132,133 +1165,75 @@ const styles = StyleSheet.create({
     position: "absolute",
   },
 
-  // Info Bar
-  infoBar: {
+  // Add Controls Modal
+  addControlsModal: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
+  },
+  addControlsContent: {
     backgroundColor: "#ffffff",
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    marginHorizontal: 10,
-    marginTop: 8,
-    borderRadius: 8,
-    elevation: 2,
+    borderRadius: 16,
+    width: "90%",
+    maxWidth: 400,
+    maxHeight: "80%",
+    elevation: 10,
   },
-  infoText: {
-    fontSize: 12,
-    color: "#374151",
-    textAlign: "center",
+  addControlsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
   },
-  infoHighlight: {
+  addControlsTitle: {
+    fontSize: 18,
     fontWeight: "bold",
-    color: "#1d4ed8",
+    color: "#1f2937",
   },
-
-  // Controls
-  controlsContainer: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-    marginHorizontal: 10,
-    marginTop: 8,
-    marginBottom: 10,
-    borderRadius: 12,
-    padding: 12,
-    elevation: 2,
+  addControlsClose: {
+    fontSize: 18,
+    color: "#6b7280",
+    fontWeight: "bold",
   },
-
-  // Quick Actions
-  quickActions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    marginBottom: 15,
+  addControlsScroll: {
+    maxHeight: 400,
   },
-  quickBtn: {
-    backgroundColor: "#3b82f6",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    minWidth: 65,
+  addSection: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
   },
-  quickBtnText: {
-    color: "#ffffff",
-    fontSize: 11,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-
-  // Sections
-  section: {
-    marginBottom: 15,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: "700",
+  addSectionTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
     color: "#374151",
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  buttonGrid: {
+  addButtonGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
+    gap: 8,
   },
   addBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    minWidth: 70,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 80,
     alignItems: "center",
+    elevation: 2,
   },
   addBtnText: {
     color: "#ffffff",
-    fontSize: 10,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-
-  // Actions
-  actions: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginTop: 10,
-  },
-  actionBtn: {
-    backgroundColor: "#6b7280",
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 8,
-    flex: 0.45,
-  },
-  deleteBtn: {
-    backgroundColor: "#ef4444",
-  },
-  actionBtnText: {
-    color: "#ffffff",
     fontSize: 12,
     fontWeight: "600",
     textAlign: "center",
   },
-
-  // Fullscreen Floating Controls
-  floatingControls: {
-    position: "absolute",
-    bottom: 30,
-    right: 20,
-    flexDirection: "column",
-    gap: 10,
-  },
-  floatingBtn: {
-    backgroundColor: "rgba(59, 130, 246, 0.9)",
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 6,
-  },
-  floatingBtnText: {
-    color: "#ffffff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
 });
-
-export default Sketch;

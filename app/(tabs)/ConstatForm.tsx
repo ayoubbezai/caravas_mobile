@@ -15,10 +15,17 @@ import {
   KeyboardAvoidingView,
   TouchableWithoutFeedback,
   Keyboard,
+  PanResponder,
+  Image,
 } from "react-native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
-import Sketch from "@/components/Sketch";
+import { Sketch } from "@/components/Sketch";
+import Signature from "react-native-signature-canvas";
+import Svg, { Path } from "react-native-svg";
+
+import { captureRef } from "react-native-view-shot";
+
 import {
   ChevronLeft,
   ChevronRight,
@@ -80,7 +87,7 @@ interface AccidentDetails {
   damages: string[];
   witnesses: Witness[];
   sketch: string;
-  responsibleParty: "A" | "B" | null;
+  additionalImages: string[];
 }
 
 interface Witness {
@@ -105,35 +112,103 @@ const ConstatForm: React.FC = () => {
   });
   const [isEditingWitness, setIsEditingWitness] = useState(false);
 
-  const loadProfile = async () => {
+  const loadConstat = async () => {
     try {
       const res = await ConstatServices.getDetails();
-      console.log(res);
-      if (res.success && res.data) {
-        Animated.parallel([
-          Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-          Animated.timing(slideAnim, {
-            toValue: 0,
-            duration: 500,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }),
-        ]).start();
+      console.log("API Response:", res);
+
+      if (res && res.success && res.data) {
+        const data = res.data;
+        console.log("Data received:", data);
+
+        // Helper to preserve already entered values
+        const preferExisting = (
+          existing: string | number | undefined,
+          incoming: any
+        ) => {
+          if (existing === undefined || existing === null || existing === "") {
+            return incoming ?? existing;
+          }
+          return existing;
+        };
+
+        // Autofill Driver A from response
+        setDrivers((prev) => {
+          const updated = [...prev];
+          const d0 = { ...updated[0] };
+
+          // Handle lessons data
+          const lesson =
+            Array.isArray(data.lessons) && data.lessons.length > 0
+              ? data.lessons[0]
+              : undefined;
+          // Handle insurance data - check for different possible field names
+          const insurance =
+            Array.isArray(data.insurances) && data.insurances.length > 0
+              ? data.insurances[0]
+              : Array.isArray(data.insurancess) && data.insurancess.length > 0
+              ? data.insurancess[0]
+              : undefined;
+
+          d0.name =
+            preferExisting(
+              d0.name,
+              `${data.first_name ?? ""} ${data.last_name ?? ""}`.trim()
+            ) || "";
+          d0.licenseNumber =
+            preferExisting(d0.licenseNumber, lesson?.license_number) || "";
+          d0.address = preferExisting(d0.address, data.address) || "";
+          d0.phone =
+            preferExisting(
+              d0.phone,
+              data.phone || data.company?.phone_number
+            ) || "";
+          d0.insuranceCompany =
+            preferExisting(d0.insuranceCompany, insurance?.company_name) || "";
+          d0.policyNumber =
+            preferExisting(d0.policyNumber, insurance?.policy_number) || "";
+
+          updated[0] = d0;
+          return updated;
+        });
+
+        // Autofill Vehicle A from gray card
+        setVehicles((prev) => {
+          const updated = [...prev];
+          const v0 = { ...updated[0] };
+          const gray = data.gray_card ?? {};
+
+          v0.make = preferExisting(v0.make, gray.car_name) || "";
+          v0.model = preferExisting(v0.model, gray.car_type) || "";
+          v0.licensePlate =
+            preferExisting(v0.licensePlate, gray.card_number) || "";
+          v0.color = preferExisting(v0.color, gray.color) || "";
+
+          updated[0] = v0;
+          return updated;
+        });
+
+        // Autofill Location
+        setLocation((prev) => ({
+          address: preferExisting(prev.address, data.address) || "",
+          city: preferExisting(prev.city, data.city) || "",
+          zipCode: preferExisting(prev.zipCode, data.postal_code) || "",
+          country: preferExisting(prev.country, data.country) || prev.country,
+          description: prev.description,
+        }));
+
+        console.log("Auto-fill completed successfully");
       } else {
+        console.log("No data received or API call failed");
       }
     } catch (err) {
-    } finally {
+      console.error("Error loading constat data:", err);
     }
   };
 
   useEffect(() => {
-    loadProfile();
+    loadConstat();
   }, []);
-  loadProfile();
 
   const [drivers, setDrivers] = useState<Driver[]>([
     {
@@ -195,7 +270,7 @@ const ConstatForm: React.FC = () => {
     damages: [],
     witnesses: [],
     sketch: "",
-    responsibleParty: null,
+    additionalImages: [],
   });
 
   // Animation values
@@ -224,7 +299,7 @@ const ConstatForm: React.FC = () => {
     fadeAnim.setValue(0);
     slideAnim.setValue(50);
 
-    if (step < 4) setStep(step + 1);
+    if (step < 5) setStep(step + 1);
   };
 
   const prevStep = () => {
@@ -319,14 +394,6 @@ const ConstatForm: React.FC = () => {
 
   const generatePDF = async () => {
     try {
-      if (!details.responsibleParty) {
-        Alert.alert(
-          "Attention",
-          "Veuillez indiquer le responsable de l'accident"
-        );
-        return;
-      }
-
       if (!drivers[0].name || !drivers[1].name) {
         Alert.alert(
           "Attention",
@@ -342,12 +409,12 @@ const ConstatForm: React.FC = () => {
         : "";
 
       const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Constat Amiable</title>
-        <style>
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Constat Amiable</title>
+          <style>
           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
           
           * {
@@ -356,7 +423,7 @@ const ConstatForm: React.FC = () => {
             padding: 0;
           }
           
-          body {
+            body {
             font-family: 'Inter', Arial, sans-serif;
             margin: 0;
             padding: 0;
@@ -372,9 +439,9 @@ const ConstatForm: React.FC = () => {
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
           }
           
-          .header {
+            .header {
             background: linear-gradient(135deg, #1e40af 0%, #3730a3 100%);
-            color: white;
+              color: white;
             padding: 24px 32px;
             text-align: center;
             border-bottom: 4px solid #f59e0b;
@@ -406,16 +473,16 @@ const ConstatForm: React.FC = () => {
             padding: 32px;
           }
           
-          .section {
+            .section {
             margin-bottom: 32px;
             border-radius: 8px;
             overflow: hidden;
           }
           
-          .section-title {
+            .section-title {
             background-color: #f1f5f9;
             padding: 16px 24px;
-            font-size: 18px;
+              font-size: 18px;
             font-weight: 600;
             color: #1e40af;
             border-left: 4px solid #1e40af;
@@ -433,17 +500,17 @@ const ConstatForm: React.FC = () => {
             margin-bottom: 16px;
           }
           
-          .label {
-            font-size: 12px;
+            .label {
+              font-size: 12px;
             font-weight: 500;
-            color: #64748b;
+              color: #64748b;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             margin-bottom: 4px;
-          }
+            }
           
-          .value {
-            font-size: 14px;
+            .value {
+              font-size: 14px;
             padding: 8px 0;
             color: #1e293b;
             font-weight: 500;
@@ -451,18 +518,18 @@ const ConstatForm: React.FC = () => {
           }
           
           .vehicle-section {
-            background-color: #f8fafc;
+              background-color: #f8fafc;
             border-radius: 8px;
             padding: 16px;
             margin-bottom: 16px;
             border-left: 4px solid;
           }
           
-          .vehicle-a {
+            .vehicle-a {
             border-color: #3b82f6;
-          }
+            }
           
-          .vehicle-b {
+            .vehicle-b {
             border-color: #ef4444;
           }
           
@@ -492,11 +559,11 @@ const ConstatForm: React.FC = () => {
             background-color: #ef4444;
           }
           
-          .damage-list {
-            list-style-type: none;
-          }
+            .damage-list {
+              list-style-type: none;
+            }
           
-          .damage-item {
+            .damage-item {
             padding: 8px 0;
             border-bottom: 1px solid #e2e8f0;
             display: flex;
@@ -550,14 +617,14 @@ const ConstatForm: React.FC = () => {
           
           .signature-date {
             font-size: 12px;
-            color: #64748b;
+              color: #64748b;
             margin-top: 8px;
           }
           
           .footer {
             margin-top: 48px;
             padding: 16px 32px;
-            text-align: center;
+              text-align: center;
             font-size: 12px;
             color: #64748b;
             border-top: 1px solid #e2e8f0;
@@ -583,10 +650,10 @@ const ConstatForm: React.FC = () => {
             color: #94a3b8;
             font-style: italic;
             padding: 8px 0;
-          }
-        </style>
-      </head>
-      <body>
+            }
+          </style>
+        </head>
+        <body>
         <div class="container">
           <div class="header">
             <h1>CONSTAT AMIABLE D'AUTO</h1>
@@ -601,20 +668,20 @@ const ConstatForm: React.FC = () => {
           </div>
           
           <div class="content">
-            <!-- General Information -->
-            <div class="section">
-              <div class="section-title">Informations Générales</div>
+          <!-- General Information -->
+          <div class="section">
+            <div class="section-title">Informations Générales</div>
               <div class="grid">
                 <div class="field">
                   <div class="label">Date de l'accident</div>
                   <div class="value">${details.date || "Non renseigné"}</div>
-                </div>
+              </div>
                 <div class="field">
                   <div class="label">Heure de l'accident</div>
                   <div class="value">${details.time || "Non renseigné"}</div>
-                </div>
+              </div>
                 <div class="field">
-                  <div class="label">Responsable selon vous</div>
+                <div class="label">Responsable selon vous</div>
                   <div class="value">
                     <span class="badge">
                       ${
@@ -623,19 +690,19 @@ const ConstatForm: React.FC = () => {
                           : "Véhicule B"
                       }
                     </span>
-                  </div>
-                </div>
+              </div>
+            </div>
               </div>
               <div class="field">
                 <div class="label">Description des circonstances</div>
                 <div class="value">${
                   details.description || "Non renseigné"
                 }</div>
-              </div>
             </div>
-            
-            <!-- Drivers Information -->
-            <div class="section">
+          </div>
+          
+          <!-- Drivers Information -->
+          <div class="section">
               <div class="section-title">Informations des Conducteurs</div>
               
               <div class="vehicle-section vehicle-a">
@@ -661,18 +728,18 @@ const ConstatForm: React.FC = () => {
                   </div>
                 </div>
                 <div class="field">
-                  <div class="label">Adresse</div>
-                  <div class="value">${
-                    drivers[0].address || "Non renseigné"
-                  }</div>
-                </div>
+                    <div class="label">Adresse</div>
+                    <div class="value">${
+                      drivers[0].address || "Non renseigné"
+                    }</div>
+                  </div>
                 <div class="grid">
                   <div class="field">
                     <div class="label">Assurance</div>
                     <div class="value">${
                       drivers[0].insuranceCompany || "Non renseigné"
                     }</div>
-                  </div>
+                </div>
                   <div class="field">
                     <div class="label">N° de police</div>
                     <div class="value">${
@@ -725,10 +792,10 @@ const ConstatForm: React.FC = () => {
                   </div>
                 </div>
               </div>
-            </div>
-            
-            <!-- Vehicles Information -->
-            <div class="section">
+          </div>
+          
+          <!-- Vehicles Information -->
+          <div class="section">
               <div class="section-title">Informations des Véhicules</div>
               
               <div class="vehicle-section vehicle-a">
@@ -765,7 +832,7 @@ const ConstatForm: React.FC = () => {
                     <div class="value">${
                       vehicles[0].vin || "Non renseigné"
                     }</div>
-                  </div>
+                </div>
                   <div class="field">
                     <div class="label">Couleur</div>
                     <div class="value">${
@@ -818,10 +885,10 @@ const ConstatForm: React.FC = () => {
                   </div>
                 </div>
               </div>
-            </div>
-            
-            <!-- Location and Details -->
-            <div class="section">
+          </div>
+          
+          <!-- Location and Details -->
+          <div class="section">
               <div class="section-title">Lieu et Détails de l'Accident</div>
               
               <div class="grid">
@@ -850,27 +917,27 @@ const ConstatForm: React.FC = () => {
               </div>
               
               <div class="field">
-                <div class="label">Description du lieu</div>
-                <div class="value">${
-                  location.description || "Non renseigné"
-                }</div>
-              </div>
-              
+                  <div class="label">Description du lieu</div>
+                  <div class="value">${
+                    location.description || "Non renseigné"
+                  }</div>
+            </div>
+            
               <div class="field">
                 <div class="label">Dégâts constatés</div>
-                <ul class="damage-list">
-                  ${
-                    details.damages.length > 0
-                      ? details.damages
-                          .map(
-                            (damage) => `<li class="damage-item">${damage}</li>`
-                          )
-                          .join("")
-                      : '<li class="empty-state">Aucun dégât enregistré</li>'
-                  }
-                </ul>
-              </div>
-              
+              <ul class="damage-list">
+                ${
+                  details.damages.length > 0
+                    ? details.damages
+                        .map(
+                          (damage) => `<li class="damage-item">${damage}</li>`
+                        )
+                        .join("")
+                    : '<li class="empty-state">Aucun dégât enregistré</li>'
+                }
+              </ul>
+            </div>
+            
               ${
                 sketchSrc
                   ? `
@@ -886,26 +953,26 @@ const ConstatForm: React.FC = () => {
 
               <div class="field">
                 <div class="label">Témoins</div>
-                ${
-                  details.witnesses.length > 0
-                    ? details.witnesses
-                        .map(
-                          (witness) => `
+              ${
+                details.witnesses.length > 0
+                  ? details.witnesses
+                      .map(
+                        (witness) => `
                         <div class="witness-item">
                           <strong>${witness.name}</strong>
                           <div>${
                             witness.contact || "Contact non renseigné"
                           }</div>
-                        </div>
-                      `
-                        )
-                        .join("")
-                    : '<div class="empty-state">Aucun témoin enregistré</div>'
-                }
-              </div>
+                  </div>
+                `
+                      )
+                      .join("")
+                  : '<div class="empty-state">Aucun témoin enregistré</div>'
+              }
             </div>
-            
-            <!-- Signatures -->
+          </div>
+          
+          <!-- Signatures -->
             <div class="signature-section">
               <div class="section-title">Signatures des Conducteurs</div>
               
@@ -914,7 +981,7 @@ const ConstatForm: React.FC = () => {
                   <div class="signature-label">Conducteur du Véhicule A</div>
                   <div class="signature-box"></div>
                   <div class="signature-date">Date: _________________</div>
-                </div>
+              </div>
                 
                 <div class="field">
                   <div class="signature-label">Conducteur du Véhicule B</div>
@@ -935,10 +1002,10 @@ const ConstatForm: React.FC = () => {
               }
             )} à ${new Date().toLocaleTimeString("fr-FR")}
           </div>
-        </div>
-      </body>
-      </html>
-    `;
+          </div>
+        </body>
+        </html>
+      `;
 
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
 
@@ -959,14 +1026,6 @@ const ConstatForm: React.FC = () => {
 
   const handleSubmit = () => {
     // Basic validation
-    if (!details.responsibleParty) {
-      Alert.alert(
-        "Attention",
-        "Veuillez indiquer le responsable de l'accident"
-      );
-      return;
-    }
-
     if (!drivers[0].name || !drivers[1].name) {
       Alert.alert(
         "Attention",
@@ -1022,48 +1081,6 @@ const ConstatForm: React.FC = () => {
                 placeholder="HH:MM"
               />
             </View>
-          </View>
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Responsable selon vous</Text>
-          <View style={styles.responsibilityContainer}>
-            <TouchableOpacity
-              style={[
-                styles.responsibilityButton,
-                details.responsibleParty === "A" &&
-                  styles.responsibilityButtonSelected,
-              ]}
-              onPress={() => handleDetailsChange("responsibleParty", "A")}
-            >
-              <Text
-                style={[
-                  styles.responsibilityButtonText,
-                  details.responsibleParty === "A" &&
-                    styles.responsibilityButtonTextSelected,
-                ]}
-              >
-                Véhicule A
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.responsibilityButton,
-                details.responsibleParty === "B" &&
-                  styles.responsibilityButtonSelected,
-              ]}
-              onPress={() => handleDetailsChange("responsibleParty", "B")}
-            >
-              <Text
-                style={[
-                  styles.responsibilityButtonText,
-                  details.responsibleParty === "B" &&
-                    styles.responsibilityButtonTextSelected,
-                ]}
-              >
-                Véhicule B
-              </Text>
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -1526,6 +1543,185 @@ const ConstatForm: React.FC = () => {
     </Animated.View>
   );
 
+  // Step 5: Additional Images and Documents
+
+  // Inside ConstatForm.tsx (not a separate file)
+  const renderStep5 = () => {
+    // ----------------- SignaturePad inline -----------------
+    const SignaturePad = ({ onChange }) => {
+      const [paths, setPaths] = useState<string[]>([]);
+      const currentPath = useRef<string>("");
+      const svgRef = useRef(null);
+
+      const panResponder = useRef(
+        PanResponder.create({
+          onStartShouldSetPanResponder: () => true,
+          onPanResponderGrant: (evt) => {
+            const { locationX, locationY } = evt.nativeEvent;
+            currentPath.current = `M${locationX} ${locationY}`;
+            setPaths((prev) => [...prev, currentPath.current]);
+          },
+          onPanResponderMove: (evt) => {
+            const { locationX, locationY } = evt.nativeEvent;
+            currentPath.current += ` L${locationX} ${locationY}`;
+            setPaths((prev) => {
+              const newPaths = [...prev];
+              newPaths[newPaths.length - 1] = currentPath.current;
+              return newPaths;
+            });
+          },
+          onPanResponderRelease: () => {
+            // ✅ Capture but DO NOT clear paths
+            if (svgRef.current) {
+              setTimeout(async () => {
+                try {
+                  const uri = await captureRef(svgRef, {
+                    format: "png",
+                    quality: 0.8,
+                    result: "base64",
+                  });
+                  onChange && onChange(`data:image/png;base64,${uri}`);
+                } catch (err) {
+                  console.error("Signature capture failed:", err);
+                }
+              }, 100);
+            }
+          },
+        })
+      ).current;
+
+      const clear = () => {
+        setPaths([]); // ✅ only clears when user presses button
+        onChange && onChange(null);
+      };
+
+      return (
+        <View style={{ borderWidth: 1, borderColor: "#ccc", borderRadius: 8 }}>
+          <View
+            ref={svgRef}
+            {...panResponder.panHandlers}
+            style={{ height: 200, backgroundColor: "#fff" }}
+          >
+            <Svg height="100%" width="100%">
+              {paths.map((d, i) => (
+                <Path
+                  key={i}
+                  d={d}
+                  stroke="black"
+                  strokeWidth={2}
+                  fill="none"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
+              ))}
+            </Svg>
+          </View>
+
+          <TouchableOpacity
+            onPress={clear}
+            style={{ padding: 10, alignItems: "center" }}
+          >
+            <Text style={{ color: "#ef4444" }}>Effacer</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    };
+
+    // ----------------- UI -----------------
+    return (
+      <Animated.View
+        style={[
+          styles.stepContainer,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+        ]}
+      >
+        <View style={styles.sectionHeader}>
+          <View style={styles.iconCircle}>
+            <ImageIcon size={20} color="#4b76b2" />
+          </View>
+          <Text style={styles.sectionTitle}>Images et Documents</Text>
+        </View>
+
+        {/* Images Section */}
+        <View style={styles.formSection}>
+          <Text style={styles.subSectionTitle}>Documents additionnels</Text>
+          <Text style={styles.label}>
+            Ajoutez des photos supplémentaires de l'accident, des dommages, ou
+            d'autres documents pertinents.
+          </Text>
+
+          <TouchableOpacity style={styles.addImageButton}>
+            <ImageIcon size={24} color="#3b82f6" />
+            <Text style={styles.addImageButtonText}>Ajouter une image</Text>
+          </TouchableOpacity>
+
+          {details.additionalImages.length > 0 && (
+            <View style={styles.imagesList}>
+              {details.additionalImages.map((image, index) => (
+                <View key={index} style={styles.imageItem}>
+                  <Text style={styles.imageName}>Image {index + 1}</Text>
+                  <TouchableOpacity style={styles.removeImageButton}>
+                    <X size={16} color="#dc2626" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* Signature Section */}
+        <View style={styles.formSection}>
+          <Text style={styles.subSectionTitle}>Signature</Text>
+          <Text style={styles.label}>
+            Veuillez signer ci-dessous pour valider le document.
+          </Text>
+
+          <SignaturePad
+            onChange={(base64) => setDetails({ ...details, signature: base64 })}
+          />
+          {details.signature && (
+            <View
+              style={{
+                marginTop: 16,
+                alignItems: "center",
+              }}
+            >
+              <Text
+                style={{ marginBottom: 8, fontWeight: "600", color: "#374151" }}
+              >
+                Votre signature enregistrée
+              </Text>
+
+              <View
+                style={{
+                  borderWidth: 1,
+                  borderColor: "#e5e7eb",
+                  borderRadius: 12,
+                  padding: 8,
+                  backgroundColor: "#fff",
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 3,
+                  elevation: 3, // for Android
+                }}
+              >
+                <Image
+                  source={{ uri: details.signature }}
+                  style={{ width: 260, height: 120, borderRadius: 8 }}
+                  resizeMode="contain"
+                />
+              </View>
+            </View>
+          )}
+        </View>
+      </Animated.View>
+    );
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -1539,7 +1735,7 @@ const ConstatForm: React.FC = () => {
       {/* Progress bar */}
       <View style={styles.progressContainer}>
         <View style={styles.progressSteps}>
-          {[1, 2, 3, 4].map((i) => (
+          {[1, 2, 3, 4, 5].map((i) => (
             <View key={i} style={styles.progressStepContainer}>
               <View
                 style={[
@@ -1571,14 +1767,16 @@ const ConstatForm: React.FC = () => {
                   ? "Conducteurs"
                   : i === 3
                   ? "Véhicules"
-                  : "Détails"}
+                  : i === 4
+                  ? "Détails"
+                  : "Images"}
               </Text>
             </View>
           ))}
         </View>
         <View style={styles.progressBar}>
           <View
-            style={[styles.progressBarFill, { width: `${(step / 4) * 100}%` }]}
+            style={[styles.progressBarFill, { width: `${(step / 5) * 100}%` }]}
           />
         </View>
       </View>
@@ -1593,10 +1791,12 @@ const ConstatForm: React.FC = () => {
         {step === 2 && renderStep2()}
         {step === 3 && renderStep3()}
         {step === 4 && renderStep4()}
+        {step === 5 && renderStep5()}
       </ScrollView>
 
       {/* Navigation buttons */}
       <View style={styles.navigationButtons}>
+        {/* Previous button */}
         <TouchableOpacity
           onPress={prevStep}
           disabled={step === 1}
@@ -1616,23 +1816,13 @@ const ConstatForm: React.FC = () => {
           </Text>
         </TouchableOpacity>
 
+        {/* Step indicator */}
         <View style={styles.stepIndicator}>
-          <Text style={styles.stepIndicatorText}>Étape {step} sur 4</Text>
+          <Text style={styles.stepIndicatorText}>Étape {step} sur 5</Text>
         </View>
 
-        {step === 4 && (
-          <TouchableOpacity
-            onPress={generatePDF}
-            style={[styles.navButton, styles.navButtonPdf]}
-          >
-            <Download size={16} color="white" />
-            <Text style={[styles.navButtonText, { color: "white" }]}>
-              Générer PDF
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {step <= 3 ? (
+        {/* If step < 5 → show Next */}
+        {step < 5 && (
           <TouchableOpacity
             onPress={nextStep}
             style={[styles.navButton, styles.navButtonNext]}
@@ -1642,14 +1832,17 @@ const ConstatForm: React.FC = () => {
             </Text>
             <ChevronRight size={16} color="white" />
           </TouchableOpacity>
-        ) : (
+        )}
+
+        {/* If step = 5 → show Generate PDF */}
+        {step === 5 && (
           <TouchableOpacity
-            onPress={handleSubmit}
-            style={[styles.navButton, styles.navButtonSubmit]}
+            onPress={generatePDF}
+            style={[styles.navButton, styles.navButtonPdf]}
           >
-            <Save size={16} color="white" />
+            <Download size={16} color="white" />
             <Text style={[styles.navButtonText, { color: "white" }]}>
-              Enregistrer
+              Générer PDF
             </Text>
           </TouchableOpacity>
         )}
@@ -1662,42 +1855,45 @@ const ConstatForm: React.FC = () => {
         visible={sketchModalVisible}
         onRequestClose={() => setSketchModalVisible(false)}
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Croquis de l'accident</Text>
+        <View style={styles.sketchModalContainer}>
+          <View style={styles.sketchModalHeader}>
+            <Text style={styles.sketchModalTitle}>Croquis de l'accident</Text>
             <TouchableOpacity
               onPress={() => setSketchModalVisible(false)}
-              style={styles.closeButton}
+              style={styles.sketchCloseButton}
             >
               <X size={24} color="#374151" />
             </TouchableOpacity>
           </View>
-          <View
-            style={[
-              styles.sketchContainer,
-              { padding: 8, backgroundColor: "#f1f5f9" },
-            ]}
-          >
+          <View style={styles.sketchModalContent}>
             <SketchComponent
               onSave={handleSketchSave}
               initialData={details.sketch}
             />
           </View>
-          <View style={styles.modalActions}>
+          <View style={styles.sketchModalActions}>
             <TouchableOpacity
-              style={[styles.modalButton, styles.modalButtonSecondary]}
+              style={[
+                styles.sketchModalButton,
+                styles.sketchModalButtonSecondary,
+              ]}
               onPress={() => setSketchModalVisible(false)}
             >
-              <Text style={styles.modalButtonTextSecondary}>Annuler</Text>
+              <Text style={styles.sketchModalButtonTextSecondary}>Annuler</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.modalButton, styles.modalButtonPrimary]}
+              style={[
+                styles.sketchModalButton,
+                styles.sketchModalButtonPrimary,
+              ]}
               onPress={() => {
                 // This would typically be handled by the Sketch component's save functionality
                 setSketchModalVisible(false);
               }}
             >
-              <Text style={styles.modalButtonTextPrimary}>Enregistrer</Text>
+              <Text style={styles.sketchModalButtonTextPrimary}>
+                Enregistrer
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1785,7 +1981,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: "#1e3a8a",
     padding: 16,
-    paddingTop: Platform.OS === "ios" ? 50 : 20,
+    paddingTop: 50,
     alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -2170,6 +2366,72 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "white",
   },
+  // Sketch Modal Styles
+  sketchModalContainer: {
+    flex: 1,
+    backgroundColor: "white",
+    paddingTop: Platform.OS === "ios" ? 50 : 20,
+  },
+  sketchModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+    backgroundColor: "#f8fafc",
+  },
+  sketchModalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1f2937",
+  },
+  sketchCloseButton: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: "#f3f4f6",
+  },
+  sketchModalContent: {
+    flex: 1,
+    padding: 8,
+    backgroundColor: "#f8fafc",
+  },
+  sketchModalActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+    backgroundColor: "white",
+  },
+  sketchModalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: "center",
+    marginHorizontal: 8,
+  },
+  sketchModalButtonPrimary: {
+    backgroundColor: "#3b82f6",
+  },
+  sketchModalButtonSecondary: {
+    backgroundColor: "#f3f4f6",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+  },
+  sketchModalButtonTextPrimary: {
+    color: "white",
+    fontWeight: "600",
+    fontSize: 16,
+  },
+  sketchModalButtonTextSecondary: {
+    color: "#374151",
+    fontWeight: "600",
+    fontSize: 16,
+  },
   modalOverlay: {
     flex: 1,
     justifyContent: "center",
@@ -2237,6 +2499,46 @@ const styles = StyleSheet.create({
   },
   navButtonPdf: {
     backgroundColor: "#8b5cf6",
+  },
+  // Step 5 Styles
+  addImageButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    backgroundColor: "#f0f9ff",
+    borderWidth: 2,
+    borderColor: "#bae6fd",
+    borderStyle: "dashed",
+    borderRadius: 8,
+    gap: 8,
+    marginVertical: 12,
+  },
+  addImageButtonText: {
+    color: "#0c4a6e",
+    fontWeight: "500",
+    fontSize: 14,
+  },
+  imagesList: {
+    gap: 8,
+  },
+  imageItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    padding: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  imageName: {
+    fontSize: 14,
+    color: "#374151",
+    fontWeight: "500",
+  },
+  removeImageButton: {
+    padding: 4,
   },
 });
 
