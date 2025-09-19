@@ -53,6 +53,7 @@ interface InfoRowProps {
   value: string | null;
   icon: React.ReactNode;
   isLast?: boolean;
+  valueColor?: string;
 }
 
 export default function ProfileScreen() {
@@ -110,7 +111,7 @@ export default function ProfileScreen() {
   if (loading && !refreshing) {
     return (
       <ThemedView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6366f1" />
+        <ActivityIndicator size="large" color="#2565F0" />
         <Text style={styles.loadingText}>Loading profile...</Text>
       </ThemedView>
     );
@@ -120,7 +121,7 @@ export default function ProfileScreen() {
     return (
       <ThemedView style={styles.errorContainer}>
         <View style={styles.errorIconContainer}>
-          <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
+          <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
         </View>
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={loadProfile}>
@@ -134,7 +135,7 @@ export default function ProfileScreen() {
     return (
       <ThemedView style={styles.errorContainer}>
         <View style={styles.errorIconContainer}>
-          <Ionicons name="person-outline" size={64} color="#64748b" />
+          <Ionicons name="person-outline" size={48} color="#64748b" />
         </View>
         <Text style={styles.errorText}>No profile data found</Text>
         <TouchableOpacity style={styles.retryButton} onPress={loadProfile}>
@@ -163,18 +164,20 @@ export default function ProfileScreen() {
       >
         {/* Header Section with Gradient */}
         <LinearGradient
-          colors={["#6366f1", "#4f46e5"]}
+          colors={["#2565F0", "#1a56db"]}
           style={styles.header}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
         >
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
-              <Ionicons name="person" size={40} color="#fff" />
+              <Ionicons name="person" size={32} color="#fff" />
             </View>
-            <View style={styles.verifiedBadge}>
-              <Ionicons name="checkmark" size={16} color="#fff" />
-            </View>
+            {profile.user?.email_verified_at && (
+              <View style={styles.verifiedBadge}>
+                <Ionicons name="checkmark" size={14} color="#fff" />
+              </View>
+            )}
           </View>
           <Text style={styles.name}>
             {profile.first_name} {profile.last_name}
@@ -190,7 +193,7 @@ export default function ProfileScreen() {
         {/* Personal Information Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="person-outline" size={22} color="#6366f1" />
+            <Ionicons name="person-outline" size={20} color="#2565F0" />
             <Text style={styles.sectionTitle}>Personal Information</Text>
           </View>
           <View style={styles.infoCard}>
@@ -198,27 +201,27 @@ export default function ProfileScreen() {
               label="First Name"
               value={profile.first_name}
               icon={
-                <Ionicons name="person-outline" size={18} color="#94a3b8" />
+                <Ionicons name="person-outline" size={16} color="#2565F0" />
               }
             />
             <InfoRow
               label="Last Name"
               value={profile.last_name}
               icon={
-                <Ionicons name="person-outline" size={18} color="#94a3b8" />
+                <Ionicons name="person-outline" size={16} color="#2565F0" />
               }
             />
             <InfoRow
               label="Date of Birth"
               value={formatDate(profile.date_of_birth)}
               icon={
-                <Ionicons name="calendar-outline" size={18} color="#94a3b8" />
+                <Ionicons name="calendar-outline" size={16} color="#2565F0" />
               }
             />
             <InfoRow
               label="Phone"
               value={profile.phone}
-              icon={<Ionicons name="call-outline" size={18} color="#94a3b8" />}
+              icon={<Ionicons name="call-outline" size={16} color="#2565F0" />}
               isLast={true}
             />
           </View>
@@ -227,31 +230,31 @@ export default function ProfileScreen() {
         {/* Address Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="location-outline" size={22} color="#6366f1" />
+            <Ionicons name="location-outline" size={20} color="#2565F0" />
             <Text style={styles.sectionTitle}>Address</Text>
           </View>
           <View style={styles.infoCard}>
             <InfoRow
               label="Address"
               value={profile.address}
-              icon={<Ionicons name="home-outline" size={18} color="#94a3b8" />}
+              icon={<Ionicons name="home-outline" size={16} color="#2565F0" />}
             />
             <InfoRow
               label="City"
               value={profile.city}
               icon={
-                <Ionicons name="business-outline" size={18} color="#94a3b8" />
+                <Ionicons name="business-outline" size={16} color="#2565F0" />
               }
             />
             <InfoRow
               label="Postal Code"
               value={profile.postal_code}
-              icon={<Ionicons name="mail-outline" size={18} color="#94a3b8" />}
+              icon={<Ionicons name="mail-outline" size={16} color="#2565F0" />}
             />
             <InfoRow
               label="Country"
               value={profile.country}
-              icon={<Ionicons name="earth-outline" size={18} color="#94a3b8" />}
+              icon={<Ionicons name="earth-outline" size={16} color="#2565F0" />}
               isLast={true}
             />
           </View>
@@ -261,7 +264,7 @@ export default function ProfileScreen() {
         {profile.company && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Ionicons name="business-outline" size={22} color="#6366f1" />
+              <Ionicons name="business-outline" size={20} color="#2565F0" />
               <Text style={styles.sectionTitle}>Company Information</Text>
             </View>
             <View style={styles.infoCard}>
@@ -269,21 +272,21 @@ export default function ProfileScreen() {
                 label="Company"
                 value={profile.company.name_of_company}
                 icon={
-                  <Ionicons name="business-outline" size={18} color="#94a3b8" />
+                  <Ionicons name="business-outline" size={16} color="#2565F0" />
                 }
               />
               <InfoRow
                 label="Contact"
                 value={`${profile.company.first_name} ${profile.company.last_name}`}
                 icon={
-                  <Ionicons name="people-outline" size={18} color="#94a3b8" />
+                  <Ionicons name="people-outline" size={16} color="#2565F0" />
                 }
               />
               <InfoRow
                 label="Company Phone"
                 value={profile.company.phone_number}
                 icon={
-                  <Ionicons name="call-outline" size={18} color="#94a3b8" />
+                  <Ionicons name="call-outline" size={16} color="#2565F0" />
                 }
                 isLast={true}
               />
@@ -294,30 +297,33 @@ export default function ProfileScreen() {
         {/* Account Information */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="lock-closed-outline" size={22} color="#6366f1" />
+            <Ionicons name="lock-closed-outline" size={20} color="#2565F0" />
             <Text style={styles.sectionTitle}>Account Information</Text>
           </View>
           <View style={styles.infoCard}>
             <InfoRow
               label="User ID"
               value={profile.user_id.toString()}
-              icon={<Ionicons name="key-outline" size={18} color="#94a3b8" />}
+              icon={<Ionicons name="key-outline" size={16} color="#2565F0" />}
             />
             <InfoRow
               label="Email Verified"
               value={profile.user?.email_verified_at ? "Yes" : "No"}
+              valueColor={
+                profile.user?.email_verified_at ? "#10b981" : "#ef4444"
+              }
               icon={
                 <Ionicons
                   name="checkmark-circle-outline"
-                  size={18}
-                  color="#94a3b8"
+                  size={16}
+                  color="#2565F0"
                 />
               }
             />
             <InfoRow
               label="Member Since"
               value={formatDate(profile.created_at)}
-              icon={<Ionicons name="time-outline" size={18} color="#94a3b8" />}
+              icon={<Ionicons name="time-outline" size={16} color="#2565F0" />}
               isLast={true}
             />
           </View>
@@ -327,12 +333,20 @@ export default function ProfileScreen() {
   );
 }
 
-const InfoRow = ({ label, value, icon, isLast = false }: InfoRowProps) => (
+const InfoRow = ({
+  label,
+  value,
+  icon,
+  isLast = false,
+  valueColor,
+}: InfoRowProps) => (
   <View style={[styles.infoRow, isLast && styles.infoRowLast]}>
     <View style={styles.infoIcon}>{icon}</View>
     <View style={styles.infoContent}>
       <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value || "Not provided"}</Text>
+      <Text style={[styles.infoValue, valueColor ? { color: valueColor } : {}]}>
+        {value || "Not provided"}
+      </Text>
     </View>
   </View>
 );
@@ -350,7 +364,7 @@ const formatDate = (dateString: string | null) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#FAFCFF",
   },
   content: {
     paddingBottom: 30,
@@ -359,18 +373,19 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#FAFCFF",
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: "#64748b",
+    color: "#334155",
+    fontFamily: "Inter",
   },
   errorContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#FAFCFF",
     padding: 20,
   },
   errorIconContainer: {
@@ -378,57 +393,59 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: "#64748b",
+    color: "#334155",
     textAlign: "center",
     marginBottom: 24,
+    fontFamily: "Inter",
   },
   retryButton: {
-    backgroundColor: "#6366f1",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-    shadowColor: "#6366f1",
+    backgroundColor: "#2565F0",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    shadowColor: "#2565F0",
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 2,
     },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 5,
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   retryButtonText: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "600",
+    fontFamily: "Inter",
   },
   header: {
     alignItems: "center",
-    padding: 32,
-    paddingTop: 50,
-    marginBottom: 24,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+    padding: 24,
+    paddingTop: 40,
+    marginBottom: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
-      height: 10,
+      height: 6,
     },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
   },
   avatarContainer: {
     marginBottom: 16,
     position: "relative",
   },
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: "rgba(255, 255, 255, 0.2)",
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: "rgba(255, 255, 255, 0.3)",
   },
   verifiedBadge: {
@@ -436,71 +453,77 @@ const styles = StyleSheet.create({
     bottom: 0,
     right: 0,
     backgroundColor: "#10b981",
-    borderRadius: 12,
-    width: 24,
-    height: 24,
+    borderRadius: 10,
+    width: 20,
+    height: 20,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
     borderColor: "#fff",
   },
   name: {
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: "bold",
     color: "#fff",
-    marginBottom: 8,
+    marginBottom: 6,
     textShadowColor: "rgba(0, 0, 0, 0.2)",
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 2,
+    fontFamily: "Inter",
   },
   roleBadge: {
     backgroundColor: "rgba(255, 255, 255, 0.2)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
     marginBottom: 8,
   },
   roleText: {
-    fontSize: 14,
+    fontSize: 12,
     color: "#fff",
     fontWeight: "600",
+    fontFamily: "Inter",
   },
   email: {
-    fontSize: 16,
+    fontSize: 14,
     color: "rgba(255, 255, 255, 0.9)",
+    fontFamily: "Inter",
   },
   section: {
     marginHorizontal: 16,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 12,
     gap: 10,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#1e293b",
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#000",
+    fontFamily: "Inter",
   },
   infoCard: {
     backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 5,
+    borderRadius: 14,
+    padding: 4,
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 1,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
   },
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 16,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#f1f5f9",
@@ -512,7 +535,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#f1f5f9",
+    backgroundColor: "#DBEAFE",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -521,13 +544,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   infoLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "500",
     color: "#64748b",
-    marginBottom: 4,
+    marginBottom: 2,
+    fontFamily: "Inter",
   },
   infoValue: {
-    fontSize: 16,
-    color: "#1e293b",
+    fontSize: 15,
+    color: "#334155",
+    fontFamily: "Inter",
   },
 });

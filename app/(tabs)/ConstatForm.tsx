@@ -1,5 +1,19 @@
 import React, { useState } from "react";
 import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  Alert,
+  Platform,
+  Animated,
+  Easing,
+  Dimensions,
+} from "react-native";
+import Sketch from "@/components/Sketch"
+import {
   ChevronLeft,
   ChevronRight,
   Save,
@@ -7,7 +21,16 @@ import {
   User,
   MapPin,
   FileText,
-} from "lucide-react";
+  X,
+  Calendar,
+  Clock,
+  AlertCircle,
+  CheckCircle,
+  Search,
+  ChevronDown,
+} from "lucide-react-native";
+
+const { width } = Dimensions.get("window");
 
 // Types for our data
 interface Driver {
@@ -44,7 +67,8 @@ interface AccidentDetails {
   description: string;
   damages: string[];
   witnesses: string[];
-  sketch: string; // URL or base64 for sketch
+  sketch: string;
+  responsibleParty: "A" | "B" | null;
 }
 
 const ConstatForm: React.FC = () => {
@@ -95,7 +119,7 @@ const ConstatForm: React.FC = () => {
     address: "",
     city: "",
     zipCode: "",
-    country: "",
+    country: "France",
     description: "",
   });
 
@@ -106,44 +130,43 @@ const ConstatForm: React.FC = () => {
     damages: [],
     witnesses: [],
     sketch: "",
+    responsibleParty: null,
   });
 
-  // Mock data for autocomplete - in a real app, this would come from a database
-  const insuranceCompanies = [
-    "AXA",
-    "MAIF",
-    "Allianz",
-    "Groupama",
-    "Matmut",
-    "GAN",
-    "Generali",
-  ];
-  const vehicleMakes = [
-    "Renault",
-    "Peugeot",
-    "Citroën",
-    "Volkswagen",
-    "BMW",
-    "Mercedes",
-    "Audi",
-    "Toyota",
-  ];
-  const vehicleModels = {
-    Renault: ["Clio", "Mégane", "Scénic", "Kadjar", "Captur"],
-    Peugeot: ["208", "308", "3008", "5008", "2008"],
-    Citroën: ["C3", "C4", "C5", "C4 Picasso"],
-    Volkswagen: ["Golf", "Polo", "Passat", "Tiguan"],
-    BMW: ["Série 1", "Série 3", "X1", "X3"],
-    Mercedes: ["Classe A", "Classe C", "GLC", "GLE"],
-    Audi: ["A1", "A3", "A4", "Q3", "Q5"],
-    Toyota: ["Yaris", "Corolla", "RAV4", "C-HR"],
-  };
+  // Animation values
+  const fadeAnim = useState(new Animated.Value(0))[0];
+  const slideAnim = useState(new Animated.Value(50))[0];
+
+  React.useEffect(() => {
+    // Animate on step change
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 400,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [step]);
 
   const nextStep = () => {
+    // Reset animations
+    fadeAnim.setValue(0);
+    slideAnim.setValue(50);
+
     if (step < 4) setStep(step + 1);
   };
 
   const prevStep = () => {
+    // Reset animations
+    fadeAnim.setValue(0);
+    slideAnim.setValue(50);
+
     if (step > 1) setStep(step - 1);
   };
 
@@ -176,387 +199,488 @@ const ConstatForm: React.FC = () => {
 
   const handleDetailsChange = (
     field: keyof AccidentDetails,
-    value: string | string[]
+    value: string | string[] | "A" | "B" | null
   ) => {
     setDetails({ ...details, [field]: value });
   };
 
-  const handleDamageToggle = (damage: string) => {
-    const updatedDamages = details.damages.includes(damage)
-      ? details.damages.filter((d) => d !== damage)
-      : [...details.damages, damage];
+  const handleDamageSelect = (damage: string, vehicle: "A" | "B") => {
+    // Remove any existing selection for this damage
+    const updatedDamages = details.damages.filter((d) => !d.includes(damage));
+
+    // Add the new selection
+    updatedDamages.push(`${vehicle}: ${damage}`);
     handleDetailsChange("damages", updatedDamages);
   };
 
   const handleWitnessAdd = () => {
-    const newWitness = prompt("Nom et coordonnées du témoin:");
-    if (newWitness) {
-      handleDetailsChange("witnesses", [...details.witnesses, newWitness]);
-    }
+    Alert.prompt(
+      "Témoin",
+      "Nom et coordonnées du témoin:",
+      [
+        {
+          text: "Annuler",
+          style: "cancel",
+        },
+        {
+          text: "Ajouter",
+          onPress: (newWitness?: string) => {
+            if (newWitness) {
+              handleDetailsChange("witnesses", [
+                ...details.witnesses,
+                newWitness,
+              ]);
+            }
+          },
+        },
+      ],
+      "plain-text"
+    );
   };
 
   const handleSubmit = () => {
-    // In a real app, this would submit the form data to your backend
     console.log("Form submitted:", { drivers, vehicles, location, details });
-    alert("Constat enregistré avec succès!");
+    Alert.alert("Succès", "Constat enregistré avec succès!");
   };
 
-  // Step 1: Driver Information
+  // Step 1: General Accident Information
   const renderStep1 = () => (
-    <div className="space-y-6">
-      <h2 className="text-xl font-semibold flex items-center gap-2">
-        <User size={20} /> Informations des conducteurs
-      </h2>
+    <Animated.View
+      style={[
+        styles.stepContainer,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        },
+      ]}
+    >
+      <View style={styles.sectionHeader}>
+        <View style={styles.iconCircle}>
+          <AlertCircle size={20} color="#4b76b2" />
+        </View>
+        <Text style={styles.sectionTitle}>Informations Générales</Text>
+      </View>
+
+      <View style={styles.formSection}>
+        <View style={styles.inputRow}>
+          <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+            <Text style={styles.label}>Date</Text>
+            <View style={styles.inputWithIcon}>
+              <Calendar size={18} color="#6b7280" style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, { paddingLeft: 40 }]}
+                value={details.date}
+                onChangeText={(value) => handleDetailsChange("date", value)}
+                placeholder="JJ/MM/AAAA"
+              />
+            </View>
+          </View>
+          <View style={[styles.inputGroup, { flex: 1 }]}>
+            <Text style={styles.label}>Heure</Text>
+            <View style={styles.inputWithIcon}>
+              <Clock size={18} color="#6b7280" style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, { paddingLeft: 40 }]}
+                value={details.time}
+                onChangeText={(value) => handleDetailsChange("time", value)}
+                placeholder="HH:MM"
+              />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Responsable selon vous</Text>
+          <View style={styles.responsibilityContainer}>
+            <TouchableOpacity
+              style={[
+                styles.responsibilityButton,
+                details.responsibleParty === "A" &&
+                  styles.responsibilityButtonSelected,
+              ]}
+              onPress={() => handleDetailsChange("responsibleParty", "A")}
+            >
+              <Text
+                style={[
+                  styles.responsibilityButtonText,
+                  details.responsibleParty === "A" &&
+                    styles.responsibilityButtonTextSelected,
+                ]}
+              >
+                Véhicule A
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.responsibilityButton,
+                details.responsibleParty === "B" &&
+                  styles.responsibilityButtonSelected,
+              ]}
+              onPress={() => handleDetailsChange("responsibleParty", "B")}
+            >
+              <Text
+                style={[
+                  styles.responsibilityButtonText,
+                  details.responsibleParty === "B" &&
+                    styles.responsibilityButtonTextSelected,
+                ]}
+              >
+                Véhicule B
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Description</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            value={details.description}
+            onChangeText={(value) => handleDetailsChange("description", value)}
+            placeholder="Décrivez le déroulement de l'accident"
+            multiline
+            textAlignVertical="top"
+          />
+        </View>
+        <Sketch/>
+      </View>
+    </Animated.View>
+  );
+
+  // Step 2: Driver Information
+  const renderStep2 = () => (
+    <Animated.View
+      style={[
+        styles.stepContainer,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        },
+      ]}
+    >
+      <View style={styles.sectionHeader}>
+        <View style={styles.iconCircle}>
+          <User size={20} color="#4b76b2" />
+        </View>
+        <Text style={styles.sectionTitle}>Conducteurs</Text>
+      </View>
 
       {drivers.map((driver, index) => (
-        <div key={driver.id} className="bg-gray-50 p-4 rounded-lg">
-          <h3 className="font-medium mb-4">Conducteur {index + 1}</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nom complet
-              </label>
-              <input
-                type="text"
-                value={driver.name}
-                onChange={(e) =>
-                  handleDriverChange(index, "name", e.target.value)
-                }
-                className="w-full p-2 border border-gray-300 rounded-md"
-                placeholder="Nom et prénom"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Numéro de permis
-              </label>
-              <input
-                type="text"
+        <View
+          key={driver.id}
+          style={[
+            styles.formSection,
+            index === 0 ? styles.carASection : styles.carBSection,
+            { marginBottom: 16 },
+          ]}
+        >
+          <View style={styles.sectionLabel}>
+            <Text
+              style={[
+                styles.subSectionTitle,
+                index === 0 ? styles.carATitle : styles.carBTitle,
+              ]}
+            >
+              Véhicule {index === 0 ? "A" : "B"}
+            </Text>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Nom complet</Text>
+            <TextInput
+              style={styles.input}
+              value={driver.name}
+              onChangeText={(value) => handleDriverChange(index, "name", value)}
+              placeholder="Nom et prénom"
+            />
+          </View>
+
+          <View style={styles.inputRow}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+              <Text style={styles.label}>N° de permis</Text>
+              <TextInput
+                style={styles.input}
                 value={driver.licenseNumber}
-                onChange={(e) =>
-                  handleDriverChange(index, "licenseNumber", e.target.value)
+                onChangeText={(value) =>
+                  handleDriverChange(index, "licenseNumber", value)
                 }
-                className="w-full p-2 border border-gray-300 rounded-md"
                 placeholder="N° de permis"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Adresse
-              </label>
-              <input
-                type="text"
-                value={driver.address}
-                onChange={(e) =>
-                  handleDriverChange(index, "address", e.target.value)
-                }
-                className="w-full p-2 border border-gray-300 rounded-md"
-                placeholder="Adresse complète"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Téléphone
-              </label>
-              <input
-                type="tel"
+            </View>
+            <View style={[styles.inputGroup, { flex: 1 }]}>
+              <Text style={styles.label}>Téléphone</Text>
+              <TextInput
+                style={styles.input}
                 value={driver.phone}
-                onChange={(e) =>
-                  handleDriverChange(index, "phone", e.target.value)
+                onChangeText={(value) =>
+                  handleDriverChange(index, "phone", value)
                 }
-                className="w-full p-2 border border-gray-300 rounded-md"
-                placeholder="Numéro de téléphone"
+                placeholder="Numéro"
+                keyboardType="phone-pad"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Assurance
-              </label>
-              <select
-                title="company"
-                value={driver.insuranceCompany}
-                onChange={(e) =>
-                  handleDriverChange(index, "insuranceCompany", e.target.value)
-                }
-                className="w-full p-2 border border-gray-300 rounded-md"
-              >
-                <option value="">Sélectionnez une compagnie</option>
-                {insuranceCompanies.map((company) => (
-                  <option key={company} value={company}>
-                    {company}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Numéro de police
-              </label>
-              <input
-                type="text"
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Adresse</Text>
+            <TextInput
+              style={styles.input}
+              value={driver.address}
+              onChangeText={(value) =>
+                handleDriverChange(index, "address", value)
+              }
+              placeholder="Adresse complète"
+            />
+          </View>
+
+          <View style={styles.inputRow}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+              <Text style={styles.label}>Assurance</Text>
+              <View style={styles.inputWithIcon}>
+                <Search size={18} color="#6b7280" style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, { paddingLeft: 40 }]}
+                  value={driver.insuranceCompany}
+                  onChangeText={(value) =>
+                    handleDriverChange(index, "insuranceCompany", value)
+                  }
+                  placeholder="Compagnie"
+                />
+              </View>
+            </View>
+            <View style={[styles.inputGroup, { flex: 1 }]}>
+              <Text style={styles.label}>N° de police</Text>
+              <TextInput
+                style={styles.input}
                 value={driver.policyNumber}
-                onChange={(e) =>
-                  handleDriverChange(index, "policyNumber", e.target.value)
+                onChangeText={(value) =>
+                  handleDriverChange(index, "policyNumber", value)
                 }
-                className="w-full p-2 border border-gray-300 rounded-md"
-                placeholder="N° de police d'assurance"
+                placeholder="N° de police"
               />
-            </div>
-          </div>
-        </div>
+            </View>
+          </View>
+        </View>
       ))}
-    </div>
+    </Animated.View>
   );
 
-  // Step 2: Vehicle Information
-  const renderStep2 = () => (
-    <div className="space-y-6">
-      <h2 className="text-xl font-semibold flex items-center gap-2">
-        <Car size={20} /> Informations des véhicules
-      </h2>
+  // Step 3: Vehicle Information
+  const renderStep3 = () => (
+    <Animated.View
+      style={[
+        styles.stepContainer,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        },
+      ]}
+    >
+      <View style={styles.sectionHeader}>
+        <View style={styles.iconCircle}>
+          <Car size={20} color="#4b76b2" />
+        </View>
+        <Text style={styles.sectionTitle}>Véhicules</Text>
+      </View>
 
       {vehicles.map((vehicle, index) => (
-        <div key={vehicle.id} className="bg-gray-50 p-4 rounded-lg">
-          <h3 className="font-medium mb-4">Véhicule {index + 1}</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Marque
-              </label>
-              <select
-                title="select"
-                value={vehicle.make}
-                onChange={(e) =>
-                  handleVehicleChange(index, "make", e.target.value)
+        <View
+          key={vehicle.id}
+          style={[
+            styles.formSection,
+            index === 0 ? styles.carASection : styles.carBSection,
+            { marginBottom: 16 },
+          ]}
+        >
+          <View style={styles.sectionLabel}>
+            <Text
+              style={[
+                styles.subSectionTitle,
+                index === 0 ? styles.carATitle : styles.carBTitle,
+              ]}
+            >
+              Véhicule {index === 0 ? "A" : "B"}
+            </Text>
+          </View>
+
+          <View style={styles.inputRow}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+              <Text style={styles.label}>Marque</Text>
+              <View style={styles.inputWithIcon}>
+                <Search size={18} color="#6b7280" style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, { paddingLeft: 40 }]}
+                  value={vehicle.make}
+                  onChangeText={(value) =>
+                    handleVehicleChange(index, "make", value)
+                  }
+                  placeholder="Marque"
+                />
+              </View>
+            </View>
+            <View style={[styles.inputGroup, { flex: 1 }]}>
+              <Text style={styles.label}>Modèle</Text>
+              <View style={styles.inputWithIcon}>
+                <ChevronDown
+                  size={18}
+                  color="#6b7280"
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  style={[styles.input, { paddingLeft: 40 }]}
+                  value={vehicle.model}
+                  onChangeText={(value) =>
+                    handleVehicleChange(index, "model", value)
+                  }
+                  placeholder="Modèle"
+                />
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.inputRow}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+              <Text style={styles.label}>Année</Text>
+              <TextInput
+                style={styles.input}
+                value={vehicle.year.toString()}
+                onChangeText={(value) =>
+                  handleVehicleChange(
+                    index,
+                    "year",
+                    parseInt(value) || new Date().getFullYear()
+                  )
                 }
-                className="w-full p-2 border border-gray-300 rounded-md"
-              >
-                <option value="">Sélectionnez une marque</option>
-                {vehicleMakes.map((make) => (
-                  <option key={make} value={make}>
-                    {make}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Modèle
-              </label>
-              <select
-                title="modal"
-                value={vehicle.model}
-                onChange={(e) =>
-                  handleVehicleChange(index, "model", e.target.value)
-                }
-                className="w-full p-2 border border-gray-300 rounded-md"
-                disabled={!vehicle.make}
-              >
-                <option value="">Sélectionnez un modèle</option>
-                {vehicle.make &&
-                  vehicleModels[
-                    vehicle.make as keyof typeof vehicleModels
-                  ]?.map((model) => (
-                    <option key={model} value={model}>
-                      {model}
-                    </option>
-                  ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Année
-              </label>
-              <input
-                title="year"
-                type="number"
-                min="1950"
-                max={new Date().getFullYear()}
-                value={vehicle.year}
-                onChange={(e) =>
-                  handleVehicleChange(index, "year", parseInt(e.target.value))
-                }
-                className="w-full p-2 border border-gray-300 rounded-md"
+                keyboardType="numeric"
+                placeholder="Année"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Plaque d'immatriculation
-              </label>
-              <input
-                type="text"
+            </View>
+            <View style={[styles.inputGroup, { flex: 1 }]}>
+              <Text style={styles.label}>Plaque</Text>
+              <TextInput
+                style={styles.input}
                 value={vehicle.licensePlate}
-                onChange={(e) =>
-                  handleVehicleChange(index, "licensePlate", e.target.value)
+                onChangeText={(value) =>
+                  handleVehicleChange(index, "licensePlate", value)
                 }
-                className="w-full p-2 border border-gray-300 rounded-md"
                 placeholder="AA-123-AA"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Numéro de série (VIN)
-              </label>
-              <input
-                type="text"
+            </View>
+          </View>
+
+          <View style={styles.inputRow}>
+            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+              <Text style={styles.label}>VIN</Text>
+              <TextInput
+                style={styles.input}
                 value={vehicle.vin}
-                onChange={(e) =>
-                  handleVehicleChange(index, "vin", e.target.value)
+                onChangeText={(value) =>
+                  handleVehicleChange(index, "vin", value)
                 }
-                className="w-full p-2 border border-gray-300 rounded-md"
-                placeholder="Numéro d'identification du véhicule"
+                placeholder="N° d'identification"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Couleur
-              </label>
-              <input
-                type="text"
+            </View>
+            <View style={[styles.inputGroup, { flex: 1 }]}>
+              <Text style={styles.label}>Couleur</Text>
+              <TextInput
+                style={styles.input}
                 value={vehicle.color}
-                onChange={(e) =>
-                  handleVehicleChange(index, "color", e.target.value)
+                onChangeText={(value) =>
+                  handleVehicleChange(index, "color", value)
                 }
-                className="w-full p-2 border border-gray-300 rounded-md"
-                placeholder="Couleur du véhicule"
+                placeholder="Couleur"
               />
-            </div>
-          </div>
-        </div>
+            </View>
+          </View>
+        </View>
       ))}
-    </div>
+    </Animated.View>
   );
 
-  // Step 3: Accident Location
-  const renderStep3 = () => (
-    <div className="space-y-6">
-      <h2 className="text-xl font-semibold flex items-center gap-2">
-        <MapPin size={20} /> Lieu de l'accident
-      </h2>
+  // Step 4: Accident Location and Details
+  const renderStep4 = () => (
+    <Animated.View
+      style={[
+        styles.stepContainer,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        },
+      ]}
+    >
+      <View style={styles.sectionHeader}>
+        <View style={styles.iconCircle}>
+          <MapPin size={20} color="#4b76b2" />
+        </View>
+        <Text style={styles.sectionTitle}>Lieu et Détails</Text>
+      </View>
 
-      <div className="bg-gray-50 p-4 rounded-lg">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Adresse
-            </label>
-            <input
-              type="text"
-              value={location.address}
-              onChange={(e) => handleLocationChange("address", e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-md"
-              placeholder="Adresse exacte de l'accident"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Ville
-            </label>
-            <input
-              type="text"
+      <View style={[styles.formSection, { marginBottom: 16 }]}>
+        <Text style={styles.subSectionTitle}>Lieu de l'accident</Text>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Adresse</Text>
+          <TextInput
+            style={styles.input}
+            value={location.address}
+            onChangeText={(value) => handleLocationChange("address", value)}
+            placeholder="Adresse exacte"
+          />
+        </View>
+
+        <View style={styles.inputRow}>
+          <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+            <Text style={styles.label}>Ville</Text>
+            <TextInput
+              style={styles.input}
               value={location.city}
-              onChange={(e) => handleLocationChange("city", e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-md"
+              onChangeText={(value) => handleLocationChange("city", value)}
               placeholder="Ville"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Code postal
-            </label>
-            <input
-              type="text"
+          </View>
+          <View style={[styles.inputGroup, { flex: 1 }]}>
+            <Text style={styles.label}>Code postal</Text>
+            <TextInput
+              style={styles.input}
               value={location.zipCode}
-              onChange={(e) => handleLocationChange("zipCode", e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-md"
+              onChangeText={(value) => handleLocationChange("zipCode", value)}
               placeholder="Code postal"
+              keyboardType="numeric"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Pays
-            </label>
-            <input
-              type="text"
-              value={location.country}
-              onChange={(e) => handleLocationChange("country", e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-md"
-              placeholder="Pays"
-              defaultValue="France"
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description détaillée du lieu
-            </label>
-            <textarea
-              value={location.description}
-              onChange={(e) =>
-                handleLocationChange("description", e.target.value)
-              }
-              className="w-full p-2 border border-gray-300 rounded-md"
-              rows={3}
-              placeholder="Décrivez l'endroit précis de l'accident (carrefour, parking, etc.)"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+          </View>
+        </View>
 
-  // Step 4: Accident Details
-  const renderStep4 = () => (
-    <div className="space-y-6">
-      <h2 className="text-xl font-semibold flex items-center gap-2">
-        <FileText size={20} /> Détails de l'accident
-      </h2>
-
-      <div className="bg-gray-50 p-4 rounded-lg space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Date de l'accident
-            </label>
-            <input
-              title="date"
-              type="date"
-              value={details.date}
-              onChange={(e) => handleDetailsChange("date", e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-md"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Heure de l'accident
-            </label>
-            <input
-              title="time"
-              type="time"
-              value={details.time}
-              onChange={(e) => handleDetailsChange("time", e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-md"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Description de l'accident
-          </label>
-          <textarea
-            value={details.description}
-            onChange={(e) => handleDetailsChange("description", e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded-md"
-            rows={4}
-            placeholder="Décrivez en détail le déroulement de l'accident"
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Pays</Text>
+          <TextInput
+            style={styles.input}
+            value={location.country}
+            onChangeText={(value) => handleLocationChange("country", value)}
+            placeholder="Pays"
           />
-        </div>
+        </View>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Dégâts constatés
-          </label>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Description du lieu</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            value={location.description}
+            onChangeText={(value) => handleLocationChange("description", value)}
+            placeholder="Décrivez l'endroit précis"
+            multiline
+            textAlignVertical="top"
+          />
+        </View>
+      </View>
+
+      <View style={[styles.formSection, { marginBottom: 16 }]}>
+        <Text style={styles.subSectionTitle}>Dégâts constatés</Text>
+        <View style={styles.damageContainer}>
+          <Text style={styles.damageInstruction}>
+            Sélectionnez les zones endommagées:
+          </Text>
+
+          <View style={styles.damageSelection}>
             {[
               "Avant droit",
               "Avant gauche",
@@ -566,135 +690,549 @@ const ConstatForm: React.FC = () => {
               "Portière passager",
               "Rétroviseur droit",
               "Rétroviseur gauche",
-              "Pare-chocs avant",
-              "Pare-chocs arrière",
-              "Phares avant",
-              "Feux arrière",
-            ].map((damage) => (
-              <label key={damage} className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={details.damages.includes(damage)}
-                  onChange={() => handleDamageToggle(damage)}
-                  className="rounded border-gray-300 text-blue-600"
-                />
-                <span className="text-sm">{damage}</span>
-              </label>
-            ))}
-          </div>
-        </div>
+            ].map((damage) => {
+              const vehicleA = details.damages.includes(`A: ${damage}`);
+              const vehicleB = details.damages.includes(`B: ${damage}`);
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Témoins
-          </label>
-          <div className="space-y-2">
-            {details.witnesses.map((witness, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between p-2 bg-white rounded border"
+              return (
+                <View key={damage} style={styles.damageRow}>
+                  <Text style={styles.damageLabel}>{damage}</Text>
+                  <View style={styles.damageButtons}>
+                    <TouchableOpacity
+                      style={[
+                        styles.damageButton,
+                        vehicleA && styles.damageButtonSelectedA,
+                        { marginRight: 8 },
+                      ]}
+                      onPress={() => handleDamageSelect(damage, "A")}
+                    >
+                      <Text
+                        style={[
+                          styles.damageButtonText,
+                          vehicleA && styles.damageButtonTextSelected,
+                        ]}
+                      >
+                        A
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.damageButton,
+                        vehicleB && styles.damageButtonSelectedB,
+                      ]}
+                      onPress={() => handleDamageSelect(damage, "B")}
+                    >
+                      <Text
+                        style={[
+                          styles.damageButtonText,
+                          vehicleB && styles.damageButtonTextSelected,
+                        ]}
+                      >
+                        B
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.formSection}>
+        <Text style={styles.subSectionTitle}>Témoins</Text>
+        <View style={styles.witnessContainer}>
+          {details.witnesses.map((witness, index) => (
+            <View key={index} style={styles.witnessItem}>
+              <Text style={styles.witnessText}>{witness}</Text>
+              <TouchableOpacity
+                onPress={() =>
+                  handleDetailsChange(
+                    "witnesses",
+                    details.witnesses.filter((_, i) => i !== index)
+                  )
+                }
               >
-                <span>{witness}</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleDetailsChange(
-                      "witnesses",
-                      details.witnesses.filter((_, i) => i !== index)
-                    )
-                  }
-                  className="text-red-500 hover:text-red-700"
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={handleWitnessAdd}
-              className="mt-2 text-sm text-blue-600 hover:text-blue-800"
-            >
-              + Ajouter un témoin
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+                <X size={16} color="#dc2626" />
+              </TouchableOpacity>
+            </View>
+          ))}
+          <TouchableOpacity
+            style={styles.addWitnessButton}
+            onPress={handleWitnessAdd}
+          >
+            <Text style={styles.addWitnessText}>+ Ajouter un témoin</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Animated.View>
   );
 
   return (
-    <div className="max-w-4xl mx-auto p-4 bg-white shadow-lg rounded-lg">
-      <h1 className="text-2xl font-bold text-center mb-6">
-        CONSTAT AMIABLE D'ACCIDENT AUTOMOBILE
-      </h1>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>CONSTAT AMIABLE</Text>
+        <Text style={styles.subtitle}>Accident Automobile</Text>
+      </View>
 
       {/* Progress bar */}
-      <div className="mb-6">
-        <div className="flex justify-between mb-2">
+      <View style={styles.progressContainer}>
+        <View style={styles.progressSteps}>
           {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                step >= i
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-200 text-gray-500"
-              }`}
-            >
-              {i}
-            </div>
+            <View key={i} style={styles.progressStepContainer}>
+              <View
+                style={[
+                  styles.progressStep,
+                  step >= i
+                    ? styles.progressStepActive
+                    : styles.progressStepInactive,
+                  step === i && styles.progressStepCurrent,
+                ]}
+              >
+                {step > i ? (
+                  <CheckCircle size={16} color="white" />
+                ) : (
+                  <Text
+                    style={
+                      step >= i
+                        ? styles.progressStepTextActive
+                        : styles.progressStepTextInactive
+                    }
+                  >
+                    {i}
+                  </Text>
+                )}
+              </View>
+              <Text style={styles.progressStepLabel}>
+                {i === 1
+                  ? "Général"
+                  : i === 2
+                  ? "Conducteurs"
+                  : i === 3
+                  ? "Véhicules"
+                  : "Détails"}
+              </Text>
+            </View>
           ))}
-        </div>
-        <div className="w-full bg-gray-200 rounded-full h-2">
-          <div
-            className="bg-blue-600 h-2 rounded-full"
-            style={{ width: `${(step / 4) * 100}%` }}
-          ></div>
-        </div>
-      </div>
+        </View>
+        <View style={styles.progressBar}>
+          <View
+            style={[styles.progressBarFill, { width: `${(step / 4) * 100}%` }]}
+          />
+        </View>
+      </View>
 
       {/* Form steps */}
-      <div className="mb-6">
+      <ScrollView style={styles.formContainer}>
         {step === 1 && renderStep1()}
         {step === 2 && renderStep2()}
         {step === 3 && renderStep3()}
         {step === 4 && renderStep4()}
-      </div>
+      </ScrollView>
 
       {/* Navigation buttons */}
-      <div className="flex justify-between">
-        <button
-          type="button"
-          onClick={prevStep}
+      <View style={styles.navigationButtons}>
+        <TouchableOpacity
+          onPress={prevStep}
           disabled={step === 1}
-          className={`flex items-center px-4 py-2 rounded-md ${
-            step === 1
-              ? "bg-gray-300 text-gray-500"
-              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-          }`}
+          style={[
+            styles.navButton,
+            step === 1 ? styles.navButtonDisabled : styles.navButtonPrev,
+          ]}
         >
-          <ChevronLeft size={16} className="mr-1" /> Précédent
-        </button>
+          <ChevronLeft size={16} color={step === 1 ? "#9ca3af" : "#374151"} />
+          <Text
+            style={[
+              styles.navButtonText,
+              step === 1 && styles.navButtonTextDisabled,
+            ]}
+          >
+            Précédent
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.stepIndicator}>
+          <Text style={styles.stepIndicatorText}>Étape {step} sur 4</Text>
+        </View>
 
         {step < 4 ? (
-          <button
-            type="button"
-            onClick={nextStep}
-            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          <TouchableOpacity
+            onPress={nextStep}
+            style={[styles.navButton, styles.navButtonNext]}
           >
-            Suivant <ChevronRight size={16} className="ml-1" />
-          </button>
+            <Text style={[styles.navButtonText, { color: "white" }]}>
+              Suivant
+            </Text>
+            <ChevronRight size={16} color="white" />
+          </TouchableOpacity>
         ) : (
-          <button
-            type="button"
-            onClick={handleSubmit}
-            className="flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+          <TouchableOpacity
+            onPress={handleSubmit}
+            style={[styles.navButton, styles.navButtonSubmit]}
           >
-            <Save size={16} className="mr-1" /> Enregistrer le constat
-          </button>
+            <Save size={16} color="white" />
+            <Text style={[styles.navButtonText, { color: "white" }]}>
+              Enregistrer
+            </Text>
+          </TouchableOpacity>
         )}
-      </div>
-    </div>
+      </View>
+    </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+  },
+  header: {
+    backgroundColor: "#1e3a8a",
+    padding: 16,
+    paddingTop: Platform.OS === "ios" ? 50 : 20,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+    zIndex: 10,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "white",
+    letterSpacing: 1,
+  },
+  subtitle: {
+    fontSize: 12,
+    color: "white",
+    opacity: 0.9,
+    marginTop: 4,
+  },
+  progressContainer: {
+    backgroundColor: "white",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  progressSteps: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  progressStepContainer: {
+    alignItems: "center",
+    flex: 1,
+  },
+  progressStep: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 6,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  progressStepActive: {
+    backgroundColor: "#1e3a8a",
+  },
+  progressStepInactive: {
+    backgroundColor: "#e5e7eb",
+  },
+  progressStepCurrent: {
+    borderColor: "#93c5fd",
+  },
+  progressStepTextActive: {
+    color: "white",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  progressStepTextInactive: {
+    color: "#6b7280",
+    fontSize: 14,
+  },
+  progressStepLabel: {
+    fontSize: 10,
+    color: "#64748b",
+    textAlign: "center",
+  },
+  progressBar: {
+    width: "100%",
+    height: 4,
+    backgroundColor: "#e5e7eb",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  progressBarFill: {
+    height: "100%",
+    backgroundColor: "#1e3a8a",
+    borderRadius: 2,
+  },
+  formContainer: {
+    flex: 1,
+    padding: 16,
+  },
+  stepContainer: {
+    gap: 16,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 8,
+  },
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#dbeafe",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1e293b",
+  },
+  formSection: {
+    backgroundColor: "white",
+    padding: 16,
+    borderRadius: 10,
+    gap: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  carASection: {
+    borderLeftWidth: 4,
+    borderLeftColor: "#3b82f6",
+  },
+  carBSection: {
+    borderLeftWidth: 4,
+    borderLeftColor: "#ef4444",
+  },
+  sectionLabel: {
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  subSectionTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#1e293b",
+  },
+  carATitle: {
+    color: "#3b82f6",
+  },
+  carBTitle: {
+    color: "#ef4444",
+  },
+  inputRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  inputGroup: {
+    marginBottom: 12,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#374151",
+    marginBottom: 4,
+  },
+  input: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 6,
+    padding: 10,
+    fontSize: 14,
+    color: "#1e293b",
+    minHeight: 44,
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: "top",
+  },
+  inputWithIcon: {
+    position: "relative",
+  },
+  inputIcon: {
+    position: "absolute",
+    left: 10,
+    top: 13,
+    zIndex: 1,
+  },
+  responsibilityContainer: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  responsibilityButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 6,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  responsibilityButtonSelected: {
+    backgroundColor: "#1e40af",
+    borderColor: "#1e40af",
+  },
+  responsibilityButtonText: {
+    fontWeight: "500",
+    color: "#64748b",
+    fontSize: 13,
+  },
+  responsibilityButtonTextSelected: {
+    color: "white",
+  },
+  damageContainer: {
+    gap: 12,
+  },
+  damageInstruction: {
+    fontSize: 13,
+    color: "#64748b",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  damageSelection: {
+    gap: 8,
+  },
+  damageRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  damageLabel: {
+    fontSize: 13,
+    color: "#374151",
+    flex: 1,
+  },
+  damageButtons: {
+    flexDirection: "row",
+  },
+  damageButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "white",
+  },
+  damageButtonSelectedA: {
+    backgroundColor: "#3b82f6",
+    borderColor: "#3b82f6",
+  },
+  damageButtonSelectedB: {
+    backgroundColor: "#ef4444",
+    borderColor: "#ef4444",
+  },
+  damageButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  damageButtonTextSelected: {
+    color: "white",
+  },
+  witnessContainer: {
+    gap: 10,
+  },
+  witnessItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    padding: 10,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  witnessText: {
+    fontSize: 13,
+    color: "#374151",
+    flex: 1,
+  },
+  addWitnessButton: {
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderStyle: "dashed",
+    borderRadius: 6,
+    alignItems: "center",
+  },
+  addWitnessText: {
+    color: "#6b7280",
+    fontSize: 13,
+  },
+  navigationButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    backgroundColor: "white",
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  navButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    gap: 6,
+  },
+  navButtonPrev: {
+    backgroundColor: "#f3f4f6",
+  },
+  navButtonNext: {
+    backgroundColor: "#1e40af",
+  },
+  navButtonSubmit: {
+    backgroundColor: "#059669",
+  },
+  navButtonDisabled: {
+    backgroundColor: "#f9fafb",
+  },
+  navButtonText: {
+    fontWeight: "600",
+    fontSize: 13,
+  },
+  navButtonTextDisabled: {
+    color: "#9ca3af",
+  },
+  stepIndicator: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#f1f5f9",
+    borderRadius: 14,
+  },
+  stepIndicatorText: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#64748b",
+  },
+});
 
 export default ConstatForm;
