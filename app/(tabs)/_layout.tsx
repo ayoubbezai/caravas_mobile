@@ -51,7 +51,7 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="pastConstat"
+        name="PastConstat"
         options={{
           title: "My Constats",
           tabBarIcon: ({ color }) => <FileText size={24} color={color} />,

@@ -15,22 +15,15 @@ import {
   KeyboardAvoidingView,
   TouchableWithoutFeedback,
   Keyboard,
-  PanResponder,
-  Image,
 } from "react-native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
-import { Sketch } from "@/components/Sketch";
-import Signature from "react-native-signature-canvas";
-import Svg, { Path } from "react-native-svg";
-
-import { captureRef } from "react-native-view-shot";
-
+import Sketch from "@/components/Sketch";
+import * as ImagePicker from "expo-image-picker";
 import {
   ChevronLeft,
   ChevronRight,
   Save,
-  Car,
   User,
   MapPin,
   FileText,
@@ -40,14 +33,18 @@ import {
   Clock,
   AlertCircle,
   CheckCircle,
-  Search,
-  ChevronDown,
   Plus,
   Minus,
   Edit3,
+  Car,
+  Search,
+  ChevronDown,
+  Camera as CameraIcon,
   Image as ImageIcon,
 } from "lucide-react-native";
 import { ConstatServices } from "@/services/ConstatServices";
+// Step 3: Vehicle Informationimport { TouchableOpacity } from "react-native";
+import { Camera } from "react-native-camera"; // or Expo Camera
 
 const { width, height } = Dimensions.get("window");
 
@@ -1229,138 +1226,197 @@ const ConstatForm: React.FC = () => {
       ))}
     </Animated.View>
   );
+  const renderStep3 = () => {
+    const openCameraAndSend = async (vehicleIndex: number) => {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        alert("Camera permission is required!");
+        return;
+      }
 
-  // Step 3: Vehicle Information
-  const renderStep3 = () => (
-    <Animated.View
-      style={[
-        styles.stepContainer,
-        {
-          opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }],
-        },
-      ]}
-    >
-      <View style={styles.sectionHeader}>
-        <View style={styles.iconCircle}>
-          <Car size={20} color="#4b76b2" />
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 1,
+        base64: true,
+      });
+
+      if (!result.cancelled && result.base64) {
+        console.log(`Captured image for vehicle ${vehicleIndex + 1}`);
+
+        try {
+          await fetch("https://flaskocr-lhb9.onrender.com/driver_licence", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              image: result.base64,
+              vehicle: vehicleIndex === 0 ? "A" : "B",
+            }),
+          });
+        } catch (error) {
+          console.log("Error sending image to API:", error);
+        }
+      }
+    };
+
+    return (
+      <Animated.View
+        style={[
+          styles.stepContainer,
+          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+        ]}
+      >
+        <View style={styles.sectionHeader}>
+          <View style={styles.iconCircle}>
+            <Car size={20} color="#4b76b2" />
+          </View>
+          <Text style={styles.sectionTitle}>Véhicules</Text>
         </View>
-        <Text style={styles.sectionTitle}>Véhicules</Text>
-      </View>
 
-      {vehicles.map((vehicle, index) => (
-        <View
-          key={vehicle.id}
-          style={[
-            styles.formSection,
-            index === 0 ? styles.carASection : styles.carBSection,
-            { marginBottom: 16 },
-          ]}
-        >
-          <View style={styles.sectionLabel}>
-            <Text
+        {vehicles.map((vehicle, index) => (
+          <View
+            key={vehicle.id}
+            style={[
+              styles.formSection,
+              index === 0 ? styles.carASection : styles.carBSection,
+              { marginBottom: 16 },
+            ]}
+          >
+            {/* Vehicle title with camera icon */}
+            <View
               style={[
-                styles.subSectionTitle,
-                index === 0 ? styles.carATitle : styles.carBTitle,
+                styles.sectionLabel,
+                {
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                },
               ]}
             >
-              Véhicule {index === 0 ? "A" : "B"}
-            </Text>
-          </View>
+              <Text
+                style={[
+                  styles.subSectionTitle,
+                  index === 0
+                    ? styles.carATitle
+                    : [styles.carBTitle, { color: "red" }],
+                ]}
+              >
+                Véhicule {index === 0 ? "A" : "B"}
+              </Text>
 
-          <View style={styles.inputRow}>
-            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-              <Text style={styles.label}>Marque</Text>
-              <View style={styles.inputWithIcon}>
-                <Search size={18} color="#6b7280" style={styles.inputIcon} />
+              <TouchableOpacity onPress={() => openCameraAndSend(index)}>
+                <CameraIcon size={20} color="#4b76b2" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Marque & Modèle */}
+            <View style={styles.inputRow}>
+              <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                <Text style={styles.label}>Marque</Text>
+                <View style={styles.inputWithIcon}>
+                  <Search size={18} color="#6b7280" style={styles.inputIcon} />
+                  <TextInput
+                    style={[styles.input, { paddingLeft: 40 }]}
+                    value={vehicle.make}
+                    onChangeText={(value) =>
+                      handleVehicleChange(index, "make", value)
+                    }
+                    placeholder="Marque"
+                  />
+                </View>
+              </View>
+
+              <View style={[styles.inputGroup, { flex: 1 }]}>
+                <Text style={styles.label}>Modèle</Text>
+                <View style={styles.inputWithIcon}>
+                  <ChevronDown
+                    size={18}
+                    color="#6b7280"
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={[styles.input, { paddingLeft: 40 }]}
+                    value={vehicle.model}
+                    onChangeText={(value) =>
+                      handleVehicleChange(index, "model", value)
+                    }
+                    placeholder="Modèle"
+                  />
+                </View>
+              </View>
+            </View>
+
+            {/* Année & Plaque */}
+            <View style={styles.inputRow}>
+              <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                <Text style={styles.label}>Année</Text>
                 <TextInput
-                  style={[styles.input, { paddingLeft: 40 }]}
-                  value={vehicle.make}
+                  style={styles.input}
+                  value={vehicle.year.toString()}
                   onChangeText={(value) =>
-                    handleVehicleChange(index, "make", value)
+                    handleVehicleChange(
+                      index,
+                      "year",
+                      parseInt(value) || new Date().getFullYear()
+                    )
                   }
-                  placeholder="Marque"
+                  keyboardType="numeric"
+                  placeholder="Année"
+                />
+              </View>
+
+              <View style={[styles.inputGroup, { flex: 1 }]}>
+                <Text style={styles.label}>Plaque</Text>
+                <TextInput
+                  style={styles.input}
+                  value={vehicle.licensePlate}
+                  onChangeText={(value) =>
+                    handleVehicleChange(index, "licensePlate", value)
+                  }
+                  placeholder="AA-123-AA"
                 />
               </View>
             </View>
-            <View style={[styles.inputGroup, { flex: 1 }]}>
-              <Text style={styles.label}>Modèle</Text>
-              <View style={styles.inputWithIcon}>
-                <ChevronDown
-                  size={18}
-                  color="#6b7280"
-                  style={styles.inputIcon}
-                />
+
+            {/* VIN & Couleur & Camera in row */}
+            <View
+              style={[
+                styles.inputRow,
+                { alignItems: "center", justifyContent: "space-between" },
+              ]}
+            >
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <Text style={styles.label}>VIN</Text>
                 <TextInput
-                  style={[styles.input, { paddingLeft: 40 }]}
-                  value={vehicle.model}
+                  style={styles.input}
+                  value={vehicle.vin}
                   onChangeText={(value) =>
-                    handleVehicleChange(index, "model", value)
+                    handleVehicleChange(index, "vin", value)
                   }
-                  placeholder="Modèle"
+                  placeholder="N° d'identification"
                 />
               </View>
-            </View>
-          </View>
 
-          <View style={styles.inputRow}>
-            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-              <Text style={styles.label}>Année</Text>
-              <TextInput
-                style={styles.input}
-                value={vehicle.year.toString()}
-                onChangeText={(value) =>
-                  handleVehicleChange(
-                    index,
-                    "year",
-                    parseInt(value) || new Date().getFullYear()
-                  )
-                }
-                keyboardType="numeric"
-                placeholder="Année"
-              />
-            </View>
-            <View style={[styles.inputGroup, { flex: 1 }]}>
-              <Text style={styles.label}>Plaque</Text>
-              <TextInput
-                style={styles.input}
-                value={vehicle.licensePlate}
-                onChangeText={(value) =>
-                  handleVehicleChange(index, "licensePlate", value)
-                }
-                placeholder="AA-123-AA"
-              />
-            </View>
-          </View>
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <Text style={styles.label}>Couleur</Text>
+                <TextInput
+                  style={styles.input}
+                  value={vehicle.color}
+                  onChangeText={(value) =>
+                    handleVehicleChange(index, "color", value)
+                  }
+                  placeholder="Couleur"
+                />
+              </View>
 
-          <View style={styles.inputRow}>
-            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-              <Text style={styles.label}>VIN</Text>
-              <TextInput
-                style={styles.input}
-                value={vehicle.vin}
-                onChangeText={(value) =>
-                  handleVehicleChange(index, "vin", value)
-                }
-                placeholder="N° d'identification"
-              />
-            </View>
-            <View style={[styles.inputGroup, { flex: 1 }]}>
-              <Text style={styles.label}>Couleur</Text>
-              <TextInput
-                style={styles.input}
-                value={vehicle.color}
-                onChangeText={(value) =>
-                  handleVehicleChange(index, "color", value)
-                }
-                placeholder="Couleur"
-              />
+
             </View>
           </View>
-        </View>
-      ))}
-    </Animated.View>
-  );
+        ))}
+      </Animated.View>
+    );
+  };
 
   // Step 4: Accident Location and Details
   const renderStep4 = () => (
@@ -1544,183 +1600,50 @@ const ConstatForm: React.FC = () => {
   );
 
   // Step 5: Additional Images and Documents
-
-  // Inside ConstatForm.tsx (not a separate file)
-  const renderStep5 = () => {
-    // ----------------- SignaturePad inline -----------------
-    const SignaturePad = ({ onChange }) => {
-      const [paths, setPaths] = useState<string[]>([]);
-      const currentPath = useRef<string>("");
-      const svgRef = useRef(null);
-
-      const panResponder = useRef(
-        PanResponder.create({
-          onStartShouldSetPanResponder: () => true,
-          onPanResponderGrant: (evt) => {
-            const { locationX, locationY } = evt.nativeEvent;
-            currentPath.current = `M${locationX} ${locationY}`;
-            setPaths((prev) => [...prev, currentPath.current]);
-          },
-          onPanResponderMove: (evt) => {
-            const { locationX, locationY } = evt.nativeEvent;
-            currentPath.current += ` L${locationX} ${locationY}`;
-            setPaths((prev) => {
-              const newPaths = [...prev];
-              newPaths[newPaths.length - 1] = currentPath.current;
-              return newPaths;
-            });
-          },
-          onPanResponderRelease: () => {
-            // ✅ Capture but DO NOT clear paths
-            if (svgRef.current) {
-              setTimeout(async () => {
-                try {
-                  const uri = await captureRef(svgRef, {
-                    format: "png",
-                    quality: 0.8,
-                    result: "base64",
-                  });
-                  onChange && onChange(`data:image/png;base64,${uri}`);
-                } catch (err) {
-                  console.error("Signature capture failed:", err);
-                }
-              }, 100);
-            }
-          },
-        })
-      ).current;
-
-      const clear = () => {
-        setPaths([]); // ✅ only clears when user presses button
-        onChange && onChange(null);
-      };
-
-      return (
-        <View style={{ borderWidth: 1, borderColor: "#ccc", borderRadius: 8 }}>
-          <View
-            ref={svgRef}
-            {...panResponder.panHandlers}
-            style={{ height: 200, backgroundColor: "#fff" }}
-          >
-            <Svg height="100%" width="100%">
-              {paths.map((d, i) => (
-                <Path
-                  key={i}
-                  d={d}
-                  stroke="black"
-                  strokeWidth={2}
-                  fill="none"
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                />
-              ))}
-            </Svg>
-          </View>
-
-          <TouchableOpacity
-            onPress={clear}
-            style={{ padding: 10, alignItems: "center" }}
-          >
-            <Text style={{ color: "#ef4444" }}>Effacer</Text>
-          </TouchableOpacity>
+  const renderStep5 = () => (
+    <Animated.View
+      style={[
+        styles.stepContainer,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }],
+        },
+      ]}
+    >
+      <View style={styles.sectionHeader}>
+        <View style={styles.iconCircle}>
+          <ImageIcon size={20} color="#4b76b2" />
         </View>
-      );
-    };
+        <Text style={styles.sectionTitle}>Images et Documents</Text>
+      </View>
 
-    // ----------------- UI -----------------
-    return (
-      <Animated.View
-        style={[
-          styles.stepContainer,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
-      >
-        <View style={styles.sectionHeader}>
-          <View style={styles.iconCircle}>
-            <ImageIcon size={20} color="#4b76b2" />
-          </View>
-          <Text style={styles.sectionTitle}>Images et Documents</Text>
-        </View>
+      <View style={styles.formSection}>
+        <Text style={styles.subSectionTitle}>Documents additionnels</Text>
+        <Text style={styles.label}>
+          Ajoutez des photos supplémentaires de l'accident, des dommages, ou
+          d'autres documents pertinents.
+        </Text>
 
-        {/* Images Section */}
-        <View style={styles.formSection}>
-          <Text style={styles.subSectionTitle}>Documents additionnels</Text>
-          <Text style={styles.label}>
-            Ajoutez des photos supplémentaires de l'accident, des dommages, ou
-            d'autres documents pertinents.
-          </Text>
+        <TouchableOpacity style={styles.addImageButton}>
+          <ImageIcon size={24} color="#3b82f6" />
+          <Text style={styles.addImageButtonText}>Ajouter une image</Text>
+        </TouchableOpacity>
 
-          <TouchableOpacity style={styles.addImageButton}>
-            <ImageIcon size={24} color="#3b82f6" />
-            <Text style={styles.addImageButtonText}>Ajouter une image</Text>
-          </TouchableOpacity>
-
-          {details.additionalImages.length > 0 && (
-            <View style={styles.imagesList}>
-              {details.additionalImages.map((image, index) => (
-                <View key={index} style={styles.imageItem}>
-                  <Text style={styles.imageName}>Image {index + 1}</Text>
-                  <TouchableOpacity style={styles.removeImageButton}>
-                    <X size={16} color="#dc2626" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-
-        {/* Signature Section */}
-        <View style={styles.formSection}>
-          <Text style={styles.subSectionTitle}>Signature</Text>
-          <Text style={styles.label}>
-            Veuillez signer ci-dessous pour valider le document.
-          </Text>
-
-          <SignaturePad
-            onChange={(base64) => setDetails({ ...details, signature: base64 })}
-          />
-          {details.signature && (
-            <View
-              style={{
-                marginTop: 16,
-                alignItems: "center",
-              }}
-            >
-              <Text
-                style={{ marginBottom: 8, fontWeight: "600", color: "#374151" }}
-              >
-                Votre signature enregistrée
-              </Text>
-
-              <View
-                style={{
-                  borderWidth: 1,
-                  borderColor: "#e5e7eb",
-                  borderRadius: 12,
-                  padding: 8,
-                  backgroundColor: "#fff",
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 3,
-                  elevation: 3, // for Android
-                }}
-              >
-                <Image
-                  source={{ uri: details.signature }}
-                  style={{ width: 260, height: 120, borderRadius: 8 }}
-                  resizeMode="contain"
-                />
+        {details.additionalImages.length > 0 && (
+          <View style={styles.imagesList}>
+            {details.additionalImages.map((image, index) => (
+              <View key={index} style={styles.imageItem}>
+                <Text style={styles.imageName}>Image {index + 1}</Text>
+                <TouchableOpacity style={styles.removeImageButton}>
+                  <X size={16} color="#dc2626" />
+                </TouchableOpacity>
               </View>
-            </View>
-          )}
-        </View>
-      </Animated.View>
-    );
-  };
+            ))}
+          </View>
+        )}
+      </View>
+    </Animated.View>
+  );
 
   return (
     <KeyboardAvoidingView
@@ -1821,20 +1744,7 @@ const ConstatForm: React.FC = () => {
           <Text style={styles.stepIndicatorText}>Étape {step} sur 5</Text>
         </View>
 
-        {/* If step < 5 → show Next */}
-        {step < 5 && (
-          <TouchableOpacity
-            onPress={nextStep}
-            style={[styles.navButton, styles.navButtonNext]}
-          >
-            <Text style={[styles.navButtonText, { color: "white" }]}>
-              Suivant
-            </Text>
-            <ChevronRight size={16} color="white" />
-          </TouchableOpacity>
-        )}
-
-        {/* If step = 5 → show Generate PDF */}
+        {/* Generate PDF button only on step 5 */}
         {step === 5 && (
           <TouchableOpacity
             onPress={generatePDF}
@@ -1844,6 +1754,19 @@ const ConstatForm: React.FC = () => {
             <Text style={[styles.navButtonText, { color: "white" }]}>
               Générer PDF
             </Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Next button only for steps 1-4 */}
+        {step < 5 && (
+          <TouchableOpacity
+            onPress={nextStep}
+            style={[styles.navButton, styles.navButtonNext]}
+          >
+            <Text style={[styles.navButtonText, { color: "white" }]}>
+              Suivant
+            </Text>
+            <ChevronRight size={16} color="white" />
           </TouchableOpacity>
         )}
       </View>
